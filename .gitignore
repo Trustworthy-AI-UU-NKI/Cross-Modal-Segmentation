@@ -1,3 +1,4 @@
 MMWHS_Dataset/
 jobs/
 data_processing/preprocessed
+data_processing/__pycache__
