@@ -27,15 +27,15 @@ class CropAroundMaskd(MapTransform):
         center = (center_x, spat_size/2, center_z)
 
         # find the size of the bounding box
-        diff_x = 2*np.max(np.array([max_x-center_x, center_x-min_x])).item()
-        diff_x += diff_x / 6
-
-        if self.resize > diff_x:
-            diff_x = self.resize
-
-        diff_z = diff_x
-
-        if diff_z > rest_size:
+        diff_x = (max_x-min_x)
+        diff_x += 10 # add some extra space
+        #opt_diff_x = diff_x + diff_x / 6
+    
+        if diff_x <= rest_size:
+            diff_x = rest_size
+            diff_z = rest_size
+        else:
+            # We have to
             diff_z = rest_size
 
         size = (diff_x, spat_size, diff_z) # minimal difference such that the whole segmentation is obtained
