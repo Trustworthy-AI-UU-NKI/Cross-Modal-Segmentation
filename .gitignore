@@ -1,5 +1,5 @@
 MMWHS_Dataset/
 jobs/
-data_processing/preprocessed
-data_processing/__pycache__
+data/preprocessed
+data/__pycache__
 PnpAda_release_data/
