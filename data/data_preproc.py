@@ -48,8 +48,8 @@ def create_ct_data(dataset_files, output_dir_image, output_dir_label, spatial_si
         [
             SqueezeDimd(keys=["img", "seg"], dim=-1),  # squeeze the last dim
             Flipd(keys=["img", "seg"], spatial_axis=1),
+            Resized(keys=["img", "seg"], spatial_size=[spatial_size,spatial_size], mode = "nearest"),
             MapLabelValued(keys=["seg"], orig_labels=[205, 420, 500, 550, 600, 820, 850], target_labels=[1, 2, 3, 4, 5 , 6 , 7]),
-            Resized(keys=["img", "seg"], spatial_size=[spatial_size,spatial_size]),
         ]
     )
     
@@ -93,8 +93,8 @@ def create_mr_data(dataset_files, output_dir_image, output_dir_label, spatial_si
 
     patch_transform = Compose(
         [
+            Resized(keys=["img", "seg"], spatial_size=[spatial_size,1,spatial_size], mode = "nearest"),# size_mode="all"),
             MapLabelValued(keys=["seg"], orig_labels=[205, 420, 500, 550, 600, 820, 850], target_labels=[1, 2, 3, 4, 5 , 6 , 7]),
-            Resized(keys=["img", "seg"], spatial_size=[spatial_size,1,spatial_size]),# size_mode="all"),
             #SpatialPadd(keys=["img", "seg"], spatial_size=[256, 1, 256]),#, mode="zeros"),
             SqueezeDimd(keys=["img", "seg"], dim=0),  # squeeze the first dim
         ]
@@ -144,7 +144,7 @@ def create_data(data_dir, modality, output_folder, spatial_size):
         data_dir = os.path.join(data_dir, "ct_train")
         images = sorted(glob.glob(os.path.join(data_dir, "ct_train_*_image.nii.gz"))) 
         labels = sorted(glob.glob(os.path.join(data_dir, "ct_train_*_label.nii.gz")))
-        output_folder = os.path.join(output_folder, "CT")
+        output_folder = os.path.join(output_folder, "CT_new")
     else:
         print("Modality not supported")
         return
