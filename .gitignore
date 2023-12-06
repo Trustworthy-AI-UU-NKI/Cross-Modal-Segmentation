@@ -3,3 +3,5 @@ jobs/
 data/preprocessed
 data/__pycache__
 PnpAda_release_data/
+baselines/checkpoints/
+baselines/UNET_logs/
