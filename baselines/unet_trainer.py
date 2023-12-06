@@ -42,9 +42,10 @@ def evaluate_unet(val_loader, model, device, epoch, dice_metric, best_metric, di
     with torch.no_grad():
         for val_data in val_loader:
             val_images, val_labels = val_data["img"].to(device), val_data["seg"].to(device)
+            # SLiding windonw inferer?? sliding_window_inference?
             val_outputs = model(val_images)
-            if (val_labels != 0 or val_labels != 1).any():
-                    print("labels are not binary")
+            if torch.any((val_labels != 0) & (val_labels != 1)):
+                print("val labels are not binary")
             # compute metric for current iteration
             val_outputs_onehot = [post_trans(i) for i in decollate_batch(val_outputs)]
             dice_metric(y_pred=val_outputs_onehot, y=val_labels)
@@ -75,9 +76,9 @@ def main(args):
     Inputs:
         args - Namespace object from the argument parser
     """
-    set_determinism(seed=args.seed)
+    #set_determinism(seed=args.seed)
 
-    filename = f'LR_{args.lr}_BS_{args.bs}_modality_{args.modality}_run_3'
+    filename = f'LR_{args.lr}_BS_{args.bs}_modality_{args.modality}_epochs_{args.epochs}'
     log_dir = os.path.join(args.log_dir, filename)
     os.makedirs(args.log_dir, exist_ok=True)
 
@@ -153,15 +154,14 @@ def main(args):
         step = 0
         with tqdm(total=len(train_images), desc=f'Epoch {epoch + 1}/{args.epochs}') as pbar:
             for batch in train_loader:
+                optimizer.zero_grad()
                 inputs, labels = batch["img"].to(device), batch["seg"].to(device)
         
-                if (labels > 1).any():
-                    print("train labels are not binary")
                 # Forward pass
                 outputs = model(inputs)
                 loss = loss_function(outputs, labels)
+
                 # Backward pass and optimization
-                optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
