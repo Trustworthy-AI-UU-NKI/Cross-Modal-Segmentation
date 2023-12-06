@@ -28,6 +28,8 @@ import sys
 import random
 import glob
 
+from torch.nn import BCEWithLogitsLoss
+
 from monai.losses import DiceLoss
 from monai.utils import set_determinism
 from torch.utils.tensorboard import SummaryWriter
@@ -76,9 +78,9 @@ def main(args):
     Inputs:
         args - Namespace object from the argument parser
     """
-    #set_determinism(seed=args.seed)
+    set_determinism(seed=args.seed)
 
-    filename = f'LR_{args.lr}_BS_{args.bs}_modality_{args.modality}_epochs_{args.epochs}'
+    filename = f'LR_{args.lr}_BS_{args.bs}_modality_{args.modality}_epochs_{args.epochs}_1label_BCEloss'
     log_dir = os.path.join(args.log_dir, filename)
     os.makedirs(args.log_dir, exist_ok=True)
 
@@ -134,7 +136,7 @@ def main(args):
         strides=(2, 2, 2, 2),
         num_res_units=2,
     ).to(device)
-    loss_function = DiceLoss(sigmoid=True)
+    loss_function = BCEWithLogitsLoss() #DiceLoss(sigmoid=True)
     optimizer = torch.optim.Adam(model.parameters(), args.lr)
 
     global_step = 0
