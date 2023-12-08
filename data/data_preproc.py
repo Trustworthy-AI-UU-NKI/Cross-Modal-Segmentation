@@ -45,13 +45,15 @@ def create_ct_data(dataset_files, output_dir_image, output_dir_label, spatial_si
     )
 
     patch_transform = Compose(
-        [
-            SqueezeDimd(keys=["img", "seg"], dim=-1),  # squeeze the last dim
-            Flipd(keys=["img", "seg"], spatial_axis=1),
-            Resized(keys=["img", "seg"], spatial_size=[spatial_size,spatial_size], mode = "nearest"),
-            MapLabelValued(keys=["seg"], orig_labels=[205, 420, 500, 550, 600, 820, 850], target_labels=[1, 2, 3, 4, 5 , 6 , 7]),
-        ]
-    )
+    [
+        SqueezeDimd(keys=["img", "seg"], dim=-1),  # squeeze the last dim
+        #Rotated(keys=["img", "seg"], angle=math.radians(180)),
+        Flipd(keys=["img", "seg"], spatial_axis=1),
+        Resized(keys=["img"], spatial_size=[256,256], mode="bilinear"),
+        Resized(keys=["seg"], spatial_size=[256,256], mode="nearest"),
+        MapLabelValued(keys=["seg"], orig_labels=[205, 420, 500, 550, 600, 820, 850], target_labels=[1, 2, 3, 4, 5 , 6 , 7]), 
+    ]
+)
     
 
     example_patch_ds = GridPatchDataset(data=ds, patch_iter=patch_func, transform=patch_transform)
@@ -144,14 +146,10 @@ def create_data(data_dir, modality, output_folder, spatial_size):
         data_dir = os.path.join(data_dir, "ct_train")
         images = sorted(glob.glob(os.path.join(data_dir, "ct_train_*_image.nii.gz"))) 
         labels = sorted(glob.glob(os.path.join(data_dir, "ct_train_*_label.nii.gz")))
-        output_folder = os.path.join(output_folder, "CT_new")
+        output_folder = os.path.join(output_folder, "CT")
     else:
         print("Modality not supported")
         return
-    
-    # random shuffle the list?
-    random.shuffle(images)  
-    random.shuffle(labels)
     
     train_images = images[:16]
     train_labels = labels[:16]
