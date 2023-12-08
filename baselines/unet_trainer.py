@@ -37,33 +37,39 @@ from tqdm import tqdm
 
 
 
-def evaluate_unet(val_loader, model, device, epoch, dice_metric, best_metric, dir_checkpoint, writer):
+def evaluate_unet(val_loader, model, device, epoch, dice_metric, best_metric, dir_checkpoint, loss_function, writer):
     # post transforms?
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
     model.eval()
     zeros = 0
+    loss_total = 0
     with torch.no_grad():
         for val_data in val_loader:
             val_images, val_labels = val_data["img"].to(device), val_data["seg"].to(device)
-            # SLiding windonw inferer?? sliding_window_inference?
             val_outputs = model(val_images)
+
             # compute metric for current iteration
             val_outputs_onehot = [post_trans(i) for i in decollate_batch(val_outputs)]
             dice_metric(y_pred=val_outputs_onehot, y=val_labels)
 
+            # compute loss for current iteration
+            loss = loss_function(val_outputs, val_labels)
+            loss_total += loss.item()
+    
         # aggregate the final mean dice result
         metric = dice_metric.aggregate().item()
-        # reset the status for next validation round
-        # print("nr of val label all zeros: ", zeros)
         
-
+        # save the best model
         if metric > best_metric:
             best_metric = metric
             torch.save(model.state_dict(), os.path.join(dir_checkpoint, "best_metric_model_unet.pth"))
             print(f"saved new best metric model at {epoch}")
 
-
+        # Logging
+        average_loss = loss_total / len(val_loader)
         writer.add_scalar("val_mean_dice", metric, epoch + 1)
+        writer.add_scalar("Validation Loss", average_loss, epoch+1)
+
         plot_2d_or_3d_image(val_images, epoch + 1, writer, index=1, tag="val image")
         plot_2d_or_3d_image(val_labels, epoch + 1, writer, index=1, tag="val label") # val_labels_onehot
         plot_2d_or_3d_image(val_outputs_onehot, epoch + 1, writer, index=1, tag="val output")
@@ -78,13 +84,18 @@ def main(args):
     Inputs:
         args - Namespace object from the argument parser
     """
+    # Set seed
     set_determinism(seed=args.seed)
 
-    filename = f'LR_{args.lr}_BS_{args.bs}_modality_{args.modality}_epochs_{args.epochs}_1label_DICEloss'
+    # Logging
+    filename = f'LR_{args.lr}_BS_{args.bs}_modality_{args.modality}_epochs_{args.epochs}_1label_loss_{args.loss}'
     log_dir = os.path.join(args.log_dir, filename)
     os.makedirs(args.log_dir, exist_ok=True)
 
     writer = SummaryWriter(comment=filename, log_dir=log_dir)
+
+    dir_checkpoint = os.path.join('checkpoints/', filename) 
+    os.makedirs(dir_checkpoint, exist_ok = True)
 
     logging.info(f'''Starting training Unet:
         Epochs:          {args.epochs}
@@ -94,6 +105,7 @@ def main(args):
         Checkpoints at filename:     {filename}
     ''')
 
+    # Get train and validation images
     train_images = sorted(glob.glob(os.path.join(args.data_dir, "train/images/*.nii.gz")))
     train_labels = sorted(glob.glob(os.path.join(args.data_dir, "train/labels/*.nii.gz")))
     train_files = [{"img": img, "seg": seg} for img, seg in zip(train_images, train_labels)]    
@@ -104,6 +116,7 @@ def main(args):
     val_files = [{"img": img, "seg": seg} for img, seg in zip(val_images, val_labels)]    
 
 
+    # Transformations
     transforms = Compose(
         [
             LoadImaged(keys=["img", "seg"]),
@@ -115,20 +128,20 @@ def main(args):
 
     post_trans = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
 
-    dir_checkpoint = os.path.join('checkpoints/', filename) 
-    os.makedirs(dir_checkpoint, exist_ok = True)
-
-    # create a training data loader
+    # Create a training data loader
     train_ds = Dataset(data=train_files, transform=transforms)
     train_loader = DataLoader(train_ds, batch_size=args.bs, shuffle=True, num_workers=4, collate_fn = list_data_collate, pin_memory=torch.cuda.is_available())
 
+    # Create a validation data loader
     val_ds = Dataset(data=val_files, transform=transforms)
     val_loader = DataLoader(val_ds, batch_size=args.bs, num_workers=4, collate_fn = list_data_collate, pin_memory=torch.cuda.is_available())
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # Dice metric
     dice_metric = DiceMetric(include_background=True, reduction="mean", get_not_nans=False)
-    # create UNet, DiceLoss and Adam optimizer
+
+    # Create UNet, loss and Adam optimizer
     model = UNet(
         spatial_dims=2,
         in_channels=1,
@@ -137,7 +150,15 @@ def main(args):
         strides=(2, 2, 2, 2),
         num_res_units=2,
     ).to(device)
-    loss_function = DiceLoss(sigmoid=True) # BCEWithLogitsLoss() # # 
+
+    if args.loss == "BCE":
+        loss_function = BCEWithLogitsLoss()
+    elif args.loss == "Dice":
+        loss_function = DiceLoss(sigmoid=True) 
+    else:
+        print("Loss not supported")
+        return
+
     optimizer = torch.optim.Adam(model.parameters(), args.lr)
 
     global_step = 0
@@ -147,6 +168,7 @@ def main(args):
         epoch_loss = 0
         step = 0
         zeros = 0
+        # Loop over the training batches
         with tqdm(total=len(train_images), desc=f'Epoch {epoch + 1}/{args.epochs}') as pbar:
             for batch in train_loader:
                 optimizer.zero_grad()
@@ -163,21 +185,20 @@ def main(args):
                 epoch_loss += loss.item()
                 step += 1
         
-        # print("nr of train label all zeros: ", zeros)
-        best_metric = evaluate_unet(val_loader, model, device, epoch, dice_metric, best_metric, dir_checkpoint, writer)
+        # Evaluate on validation set
+        best_metric = evaluate_unet(val_loader, model, device, epoch, dice_metric, best_metric, dir_checkpoint, loss_function, writer)
             
+        # Logging
         average_loss = epoch_loss / len(train_loader)
         print(f"Epoch [{epoch+1}/{args.epochs}], Loss: {average_loss}")
-        # Log loss to TensorBoard
         writer.add_scalar("Training Loss", average_loss, epoch+1)
 
     
-    
+    # Plot some images
     bin_outputs = [post_trans(i) for i in decollate_batch(outputs)]
     plot_2d_or_3d_image(inputs, epoch + 1, writer, index=0, tag="train image")
     plot_2d_or_3d_image(labels, epoch + 1, writer, index=0, tag="train label") 
     plot_2d_or_3d_image(bin_outputs, epoch + 1, writer, index=0, tag="train output")
-
 
     # Close the TensorBoard writer
     writer.close()
@@ -205,6 +226,9 @@ if __name__ == '__main__':
                         help='Learning rate')
     parser.add_argument('--log_dir', default='UNET_logs/', type=str,
                         help='Directory where the PyTorch Lightning logs should be created.')
+    
+    parser.add_argument('--loss', default="BCE", type=str,
+                        help='Loss used during training')
 
     argv = sys.argv[sys.argv.index("--") + 1:]
     args = parser.parse_args(argv)
