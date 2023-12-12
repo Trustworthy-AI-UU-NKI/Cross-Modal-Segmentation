@@ -42,14 +42,18 @@ class CropAroundMaskd(MapTransform):
         assert spat_size >= rest_size, "resolution is to small to crop around the segmentation mask"
 
         if diff_x <= rest_size and diff_x >= diff_z:
+            print('first case')
             diff_z = diff_x
         elif diff_x <= rest_size and diff_z <= rest_size:
+            print('second case')
             diff_x = diff_z
         elif diff_x <= rest_size:
+            print('third case')
             diff_x = rest_size
             diff_z = rest_size
         else:
             # We have to pad later on to make the image square
+            print('fourth case')
             diff_z = rest_size
             padding = True
 
