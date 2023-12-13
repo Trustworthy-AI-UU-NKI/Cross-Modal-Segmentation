@@ -34,8 +34,8 @@ class CropAroundMaskd(MapTransform):
         center = (center_x, spat_size/2, center_z)
 
         # find the size of the bounding box
-        diff_x = (max_x-min_x) * 1.1 # add some extra space
-        diff_z = (max_z-min_z) * 1.1 # add some extray space
+        diff_x = (max_x-min_x) * 1.4 # add some extra space
+        diff_z = (max_z-min_z) * 1.4 # add some extray space
     
         padding = False 
     
