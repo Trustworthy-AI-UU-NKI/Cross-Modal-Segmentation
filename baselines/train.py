@@ -20,22 +20,31 @@ from monai.transforms import (
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-def train(trainer, model, transforms, bs):
-    train_images = sorted(glob.glob(os.path.join(args.data_dir, "train/images/*.nii.gz")))
-    train_labels = sorted(glob.glob(os.path.join(args.data_dir, "train/labels/*.nii.gz")))
+def train(args, trainer, model, transforms):
+    train_images = sorted(glob.glob(os.path.join(args.data_dir, "images/case_100*/*.nii.gz")))
+    train_images2 = sorted(glob.glob(os.path.join(args.data_dir, "images/case_101[0-6]/*.nii.gz")))
+    train_images = train_images + train_images2
+
+    train_labels = sorted(glob.glob(os.path.join(args.data_dir, "labels/case_100*/*.nii.gz")))
+    train_labels2 = sorted(glob.glob(os.path.join(args.data_dir, "labels/case_101[0-6]/*.nii.gz")))
+    train_labels = train_labels + train_labels2
     train_files = [{"img": img, "seg": seg} for img, seg in zip(train_images, train_labels)]
+    # print("nr train files:", len(train_files))
 
-    val_images = sorted(glob.glob(os.path.join(args.data_dir, "val/images/*.nii.gz")))
-    val_labels = sorted(glob.glob(os.path.join(args.data_dir, "val/labels/*.nii.gz")))
+
+    val_images = sorted(glob.glob(os.path.join(args.data_dir, "images/case_101[7-8]/*.nii.gz")))
+    val_labels = sorted(glob.glob(os.path.join(args.data_dir, "labels/case_101[7-8]/*.nii.gz")))
     val_files = [{"img": img, "seg": seg} for img, seg in zip(val_images, val_labels)]
+    # print("nr val files:", len(val_files))
 
-     # Create a training data loader
+
+    # Create a training data loader
     train_ds = Dataset(data=train_files, transform=transforms)
     train_loader = DataLoader(train_ds, batch_size=args.bs, shuffle=True, num_workers=4, collate_fn=list_data_collate, pin_memory=torch.cuda.is_available())
 
     # Create a validation data loader
     val_ds = Dataset(data=val_files, transform=transforms)
-    val_loader = DataLoader(val_ds, batch_size=bs, num_workers=4, collate_fn=list_data_collate, pin_memory=torch.cuda.is_available())
+    val_loader = DataLoader(val_ds, batch_size=args.bs, num_workers=4, collate_fn=list_data_collate, pin_memory=torch.cuda.is_available())
 
     model.train_dataloader = lambda: train_loader
     model.val_dataloader = lambda: val_loader
@@ -43,14 +52,19 @@ def train(trainer, model, transforms, bs):
     trainer.fit(model)
 
 
-def test(trainer, model, transforms,bs):
-    test_images = sorted(glob.glob(os.path.join(args.data_dir, "test/images/*.nii.gz")))
-    test_labels = sorted(glob.glob(os.path.join(args.data_dir, "test/labels/*.nii.gz")))
+def test(args, trainer, model, transforms):
+    test_images = sorted(glob.glob(os.path.join(args.data_dir, "images/case_1019/*.nii.gz")))
+    test_images2 = sorted(glob.glob(os.path.join(args.data_dir, "images/case_1020/*.nii.gz")))
+    test_images = test_images + test_images2
+
+    test_labels = sorted(glob.glob(os.path.join(args.data_dir, "labels/case_1019/*.nii.gz")))
+    test_labels2 = sorted(glob.glob(os.path.join(args.data_dir, "labels/case_1020/*.nii.gz")))
+    test_labels = test_labels + test_labels2
     test_files = [{"img": img, "seg": seg} for img, seg in zip(test_images, test_labels)]
 
     # Create a test data loader
     test_ds = Dataset(data=test_files, transform=transforms)
-    test_loader = DataLoader(test_ds, batch_size=bs, num_workers=4, collate_fn=list_data_collate, pin_memory=torch.cuda.is_available())
+    test_loader = DataLoader(test_ds, batch_size=args.bs, num_workers=4, collate_fn=list_data_collate, pin_memory=torch.cuda.is_available())
 
     model.test_dataloader = lambda: test_loader
 
@@ -98,7 +112,7 @@ def main(args):
                         ))
 
     if args.mode == "train":
-        train(trainer, model, transforms, args.bs)
+        train(args, trainer, model, transforms)
     elif args.mode == "test":
         # Check whether pretrained model exists. If yes, load it and skip training
 
@@ -106,7 +120,7 @@ def main(args):
         if os.path.isfile(pretrained_filename):
             print(f"Found pretrained model at {pretrained_filename}, loading...")
             model = model_class.load_from_checkpoint(pretrained_filename) 
-            test(trainer, model, transforms, args.bs)
+            test(args, trainer, model, transforms)
         else:
             print("No pretrained model found, training from scratch...")
             # train(trainer, model, transforms, args.bs)

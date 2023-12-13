@@ -5,9 +5,9 @@ from monai.transforms import MapTransform, SpatialCropd, SpatialPadd
 
 
 class CropAroundMaskd(MapTransform):
-    def __init__(self, keys, spatial_size):
+    def __init__(self, keys, extra_spacing = 1.4):
         super().__init__(keys)
-        self.resize = spatial_size
+        self.marge = extra_spacing
 
     def __call__(self, data):
         
@@ -15,59 +15,59 @@ class CropAroundMaskd(MapTransform):
         
         # Get bounding box from the segmentation mask
         seg_tensor = seg.squeeze(0)
-        spat_size = seg_tensor.shape[0]
-        rest_size = seg_tensor.shape[2]
+        # 
+        x_dim_size = seg_tensor.shape[0] # left right of the image
+        y_dim_size = seg_tensor.shape[1] # front back of the image
+        z_dim_size = seg_tensor.shape[2] # top bottom of the image --> in this axis we slice
 
         nonzero_indices = torch.nonzero(seg_tensor > 0, as_tuple=True)
 
         # Extract the minimum indices along each dimension
         min_x = torch.min(nonzero_indices[0]).item()  # x-axis
-        min_z = torch.min(nonzero_indices[2]).item()  # z-axis
+        min_y = torch.min(nonzero_indices[1]).item()  # y-axis
 
         max_x = torch.max(nonzero_indices[0]).item()  # x-axis
-        max_z = torch.max(nonzero_indices[2]).item() # z-axis
+        max_y = torch.max(nonzero_indices[1]).item() # y-axis
 
         # Calculate the center of the bounding box
         center_x = (min_x + max_x) / 2
-        center_z = (min_z + max_z) / 2
+        center_y = (min_y + max_y) / 2
 
-        center = (center_x, spat_size/2, center_z)
+        center = (center_x, center_y, z_dim_size/2)
 
         # find the size of the bounding box
-        diff_x = (max_x-min_x) * 1.4 # add some extra space
-        diff_z = (max_z-min_z) * 1.4 # add some extray space
+        diff_x = (max_x-min_x) * self.marge # add some extra space: default 1.4
+        diff_y = (max_y-min_y) * self.marge # add some extra space: default 1.4
     
         padding = False 
     
-        assert spat_size >= rest_size, "resolution is to small to crop around the segmentation mask"
-
-        if diff_x <= rest_size and diff_x >= diff_z:
-            print('first case')
-            diff_z = diff_x
-        elif diff_x <= rest_size and diff_z <= rest_size:
-            print('second case')
-            diff_x = diff_z
-        elif diff_x <= rest_size:
-            print('third case')
-            diff_x = rest_size
-            diff_z = rest_size
+        if diff_x > x_dim_size:
+            diff_x = x_dim_size
+        
+        if diff_y > y_dim_size:
+            diff_y = y_dim_size
+        
+        if diff_x > diff_y and diff_x <= y_dim_size:
+            diff_y = diff_x
+        
+        elif diff_y > diff_x and diff_y <= x_dim_size:
+            diff_x = diff_y
+    
         else:
-            # We have to pad later on to make the image square
-            print('fourth case')
-            diff_z = rest_size
             padding = True
 
-        size = (round(diff_x), spat_size, round(diff_z)) # minimal difference such that the whole segmentation is obtained
+
+        size = (round(diff_x), round(diff_y), z_dim_size) # minimal difference such that the whole segmentation is obtained
        
         # Create spatial crop transform
-        cropper = SpatialCropd(keys =self.keys, roi_center = center, roi_size = size)
+        cropper = SpatialCropd(keys = self.keys, roi_center = center, roi_size = size)
 
         # Apply the crop to the image and segmentation mask
         cropped_data = cropper(data)
 
         if padding:
             # Pad the image and segmentation mask to make it square
-            padder = SpatialPadd(keys = self.keys, spatial_size = diff_x)
+            padder = SpatialPadd(keys = self.keys, spatial_size = round(max([diff_x, diff_y])))
             cropped_data = padder(cropped_data) 
 
         # Update the data dictionary

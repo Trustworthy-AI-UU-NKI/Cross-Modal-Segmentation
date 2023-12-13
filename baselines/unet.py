@@ -49,7 +49,7 @@ class UNetL(pl.LightningModule):
         inputs, labels = batch["img"].to(self.device), batch["seg"].to(self.device)
         outputs = self.model(inputs)
         loss = self.loss_function(outputs, labels)
-        self.log("Train loss", loss)
+        self.log("Train loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -65,7 +65,7 @@ class UNetL(pl.LightningModule):
         if batch_idx == len(self.val_dataloader()) - 1:
             self.log_images(inputs, labels, val_outputs_onehot, "val", self.global_step)
         
-        self.log("Validation loss", loss)
+        self.log("Validation loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 
         return loss
 
