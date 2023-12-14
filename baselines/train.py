@@ -60,6 +60,9 @@ def test(args, trainer, model, transforms):
     test_labels = sorted(glob.glob(os.path.join(args.data_dir, "labels/case_1019/*.nii.gz")))
     test_labels2 = sorted(glob.glob(os.path.join(args.data_dir, "labels/case_1020/*.nii.gz")))
     test_labels = test_labels + test_labels2
+
+    # test_images = sorted(glob.glob(os.path.join(args.data_dir, "test/images/slice_*.nii.gz")))
+    # test_labels = sorted(glob.glob(os.path.join(args.data_dir, "test/labels/slice_*.nii.gz")))
     test_files = [{"img": img, "seg": seg} for img, seg in zip(test_images, test_labels)]
 
     # Create a test data loader
