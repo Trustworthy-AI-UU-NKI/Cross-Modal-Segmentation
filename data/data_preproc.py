@@ -38,44 +38,52 @@ def create_ct_data(dataset_files, output_dir_image, output_dir_label, spatial_si
             ScaleIntensityd(keys="img"), # normalization between 0 and 1 # segmentation masl also?
             EnsureTyped(keys=["img", "seg"]),
         ])  
-    
-    # TO DO: Experiment with last two parameters
-    ds = Dataset(data=dataset_files, transform=volume_transforms)
- 
-    # Create patches (i.e. images)
-    patch_func = monai.data.PatchIterd(
-        keys=["img", "seg"],
-        patch_size=(None, None, 1),  # dynamic first two dimensions
-        start_pos=(0, 0, 0)
-    )
 
-    patch_transform = Compose(
-    [
-        SqueezeDimd(keys=["img", "seg"], dim=-1),  # squeeze the last dim
-        #Rotated(keys=["img", "seg"], angle=math.radians(180)),
-        Flipd(keys=["img", "seg"], spatial_axis=1),
-        Resized(keys=["img"], spatial_size=[256,256], mode="bilinear"),
-        Resized(keys=["seg"], spatial_size=[256,256], mode="nearest"),
-        MapLabelValued(keys=["seg"], orig_labels=[205, 420, 500, 550, 600, 820, 850], target_labels=[1, 2, 3, 4, 5 , 6 , 7]), 
-    ]
-)
-    
-
-    example_patch_ds = GridPatchDataset(data=ds, patch_iter=patch_func, transform=patch_transform)
-    patch_data_loader = DataLoader(example_patch_ds, batch_size=1)
-
+    sample = 1001
     i = 0
-    for batch in patch_data_loader:
-        image, label = batch[0]["img"], batch[0]["seg"]
-        #if torch.any(image.data != 0).item():
-            # Convert the torch tensor to a SimpleITK image
+    
+    for file in dataset_files:
+        file_name = f"case_{sample}"
+        output_dir_image_file = os.path.join(output_dir_image, file_name)
+        output_dir_label_file = os.path.join(output_dir_label, file_name)
+        os.makedirs(output_dir_image_file, exist_ok=True)
+        os.makedirs(output_dir_label_file, exist_ok=True)   
+        ds = Dataset(data=[file], transform=volume_transforms)
 
-        slice_image = sitk.GetImageFromArray(image.squeeze(0))
-        slice_label = sitk.GetImageFromArray(label.squeeze(0))
-        # # Save the 2D slice as a NIfTI file
-        sitk.WriteImage(slice_image, os.path.join(output_dir_image, f"slice_{i}.nii.gz"))
-        sitk.WriteImage(slice_label, os.path.join(output_dir_label, f"slice_{i}.nii.gz"))
-        i += 1
+
+        # Create patches (i.e. images)
+        patch_func = monai.data.PatchIterd(
+            keys=["img", "seg"],
+            patch_size=(None, None, 1),  # dynamic first two dimensions
+            start_pos=(0, 0, 0)
+        )
+
+        patch_transform = Compose(
+            [
+                SqueezeDimd(keys=["img", "seg"], dim=-1),  # squeeze the last dim
+                #Rotated(keys=["img", "seg"], angle=math.radians(180)),
+                Flipd(keys=["img", "seg"], spatial_axis=1),
+                Resized(keys=["img"], spatial_size=[256,256], mode="bilinear"),
+                Resized(keys=["seg"], spatial_size=[256,256], mode="nearest"),
+                MapLabelValued(keys=["seg"], orig_labels=[205, 420, 500, 550, 600, 820, 850], target_labels=[1, 2, 3, 4, 5 , 6 , 7]), 
+                SqueezeDimd(keys=["img", "seg"], dim=0),
+            ]
+        )
+
+        example_patch_ds = GridPatchDataset(data=ds, patch_iter=patch_func, transform=patch_transform)
+        patch_data_loader = DataLoader(example_patch_ds, batch_size=1)
+
+        for batch in patch_data_loader:
+            image, label = batch[0]["img"], batch[0]["seg"]
+            # Convert the torch tensor to a SimpleITK image
+            slice_image = sitk.GetImageFromArray(image)
+            slice_label = sitk.GetImageFromArray(label)
+            # # Save the 2D slice as a NIfTI file
+            sitk.WriteImage(slice_image, os.path.join(output_dir_image_file, f"slice_{i}.nii.gz"))
+            sitk.WriteImage(slice_label, os.path.join(output_dir_label_file, f"slice_{i}.nii.gz"))
+            i += 1
+        
+        sample += 1
 
 def create_mr_data(dataset_files, output_dir_image, output_dir_label, spatial_size):
     volume_transforms = Compose(
