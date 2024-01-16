@@ -105,7 +105,7 @@ class MMWHS_single(pl.LightningDataModule):
 
 
 class MMWHS_double(pl.LightningDataModule):
-    def __init__(self, target, data_dir, batch_size=4, k_folds=6):
+    def __init__(self, target, data_dir="../data/preprocessed/", batch_size=4, k_folds=6, mod='CT', FT=False):
         super().__init__()
         self.bs = batch_size
         self.k_folds = k_folds
@@ -113,7 +113,15 @@ class MMWHS_double(pl.LightningDataModule):
         self.fold_datasets = []
         self.test_dataset = None
         self.target_labels = target
-        self.data_dir = data_dir
+        self.ft = FT
+        if mod == 'CT':
+            self.data_dir_true = os.path.join(data_dir, 'CT/annotated/')
+            self.data_dir_fake = os.path.join(data_dir, 'MRI_fake/annotated/')
+            self.data_dir_test = os.path.join(data_dir, 'MRI/annotated/')
+        else:   
+            self.data_dir_true = os.path.join(data_dir, 'MRI/annotated/')
+            self.data_dir_fake = os.path.join(data_dir, 'CT_fake/annotated/')
+            self.data_dir_test = os.path.join(data_dir, 'CT/annotated/')
 
     def setup(self):
         # Transform
@@ -126,9 +134,15 @@ class MMWHS_double(pl.LightningDataModule):
             ]
         )
 
-        all_images = sorted(glob.glob(os.path.join(self.data_dir, "images/case_10*")))
-        all_labels = sorted(glob.glob(os.path.join(self.data_dir, "labels/case_10*")))
-        train_cases = [*range(0,18), *range(20, 38)] 
+        all_images = sorted(glob.glob(os.path.join(self.data_dir_true, "images/case_10*"))) + sorted(glob.glob(os.path.join(self.data_dir_fake, "images/case_10*")))
+        all_labels = sorted(glob.glob(os.path.join(self.data_dir_true, "labels/case_10*"))) + sorted(glob.glob(os.path.join(self.data_dir_fake, "labels/case_10*")))
+        
+        #TODO: add funetuning aproach
+        if self.ft:
+            train_cases = [*range(0,18), *range(20, 38)] 
+        else:
+            # take only the fake images OR 1-18 of the fake images
+            train_cases = range(20,38) # range(20, 40)
     
         # Splitting into folds
         kf = KFold(n_splits=self.k_folds, shuffle=True)
@@ -154,16 +168,11 @@ class MMWHS_double(pl.LightningDataModule):
 
 
         # Test dataset remains the same
-        test_images = sorted(glob.glob(os.path.join(self.data_dir, "images/case_1019/*.nii.gz"))) + sorted(glob.glob(os.path.join(self.data_dir, "images/case_1020/*.nii.gz")))
-        test_images2 = sorted(glob.glob(os.path.join(self.data_dir, "images/case_1039/*.nii.gz"))) + sorted(glob.glob(os.path.join(self.data_dir, "images/case_1040/*.nii.gz")))
+        test_images_fake = sorted(glob.glob(os.path.join(self.data_dir_fake, "images/case_1019/*.nii.gz"))) + sorted(glob.glob(os.path.join(self.data_dir_fake, "images/case_1020/*.nii.gz")))
+        test_labels_fake = sorted(glob.glob(os.path.join(self.data_dir_fake, "labels/case_1019/*.nii.gz"))) + sorted(glob.glob(os.path.join(self.data_dir_fake, "labels/case_1020/*.nii.gz")))
+       
 
-        test_images = test_images + test_images2
-
-        test_labels = sorted(glob.glob(os.path.join(self.data_dir, "labels/case_1019/*.nii.gz"))) + sorted(glob.glob(os.path.join(self.data_dir, "labels/case_1020/*.nii.gz")))
-        test_labels2 = sorted(glob.glob(os.path.join(self.data_dir, "labels/case_1039/*.nii.gz"))) + sorted(glob.glob(os.path.join(self.data_dir, "labels/case_1040/*.nii.gz")))
-        test_labels = test_labels + test_labels2
-
-        test_files = [{"img": img, "seg": seg} for img, seg in zip(test_images, test_labels)]
+        test_files = [{"img": img, "seg": seg} for img, seg in zip(test_images_fake, test_labels_fake)]
 
         # Create a test data set
         self.test_dataset = Dataset(data=test_files, transform=transforms)

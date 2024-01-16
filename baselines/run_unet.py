@@ -6,8 +6,6 @@ import glob
 
 from unet_pl import UNetL
 
-#from ddfnet import DDFNet
-
 import pytorch_lightning as pl
 from monai.transforms import (
     LoadImaged,
@@ -99,10 +97,8 @@ def main(args):
         dataset.setup()
     if args.model == 'drit_unet':
         model_class = UNetL
-        dataset = MMWHS_double(target = labels, data_dir = args.data_dir, batch_size=args.bs, k_folds=args.k_folds)
+        dataset = MMWHS_double(target = labels, data_dir = args.data_dir, batch_size=args.bs, k_folds=args.k_folds, mod=args.modality)
         dataset.setup()
-    # elif args.model == 'ddfnet':
-    #     model_class = DDFNet
     else:
         print("Model not implemented")
 
@@ -149,16 +145,14 @@ if __name__ == '__main__':
                         help='batch_size')
     parser.add_argument('--modality', default="CT", type=str,
                         help='Learning rate')
-    parser.add_argument('--log_dir', default='UNET_logs/', type=str,
-                        help='Directory where the PyTorch Lightning logs should be created.')
     parser.add_argument('--model', default='unet', type=str,
-                    help='Baseline used')
-
+                    help='Baseline used') # other option is drit_unet
+    
     parser.add_argument('--loss', default="BCE", type=str,
-                        help='Loss used during training')
+                        help='Loss used during training') # BCE, DICE or BCE_DICE
     
     parser.add_argument('--pred', default='MYO', type=str,
-                        help='Prediction of which label')
+                        help='Prediction of which label') # MYO, LV, RV, MYO_RV, MYO_LV_RV
 
     parser.add_argument('--mode', default='train', type=str,
                         help='train or test')

@@ -74,3 +74,39 @@ class CropAroundMaskd(MapTransform):
         data.update(cropped_data)
 
         return data
+    
+class CropAroundHeartd(MapTransform):
+    def __init__(self, keys):
+        super().__init__(keys)
+
+    def __call__(self, data):
+        # here we only have the image
+        # Calculate the center of the bounding box
+        img = data[self.keys[0]]
+        
+        # Get bounding box from the segmentation mask
+        img_tensor = img.squeeze(0)
+
+        min_dim_size = min(img_tensor.shape[0], img_tensor.shape[1])
+        center_x = img_tensor.shape[0] / 2
+        center_y = img_tensor.shape[1] / 2
+        center_z = img_tensor.shape[2] / 2
+
+        center = (center_x, center_y, center_z)
+        size = (min_dim_size, min_dim_size, img_tensor.shape[2])
+
+        # Create spatial crop transform
+        cropper = SpatialCropd(keys = self.keys, roi_center = center, roi_size = size)
+
+        # Apply the crop to the image and segmentation mask
+        cropped_data = cropper(data)
+
+        # Update the data dictionary
+        data.update(cropped_data)
+
+        return data
+        
+
+
+
+
