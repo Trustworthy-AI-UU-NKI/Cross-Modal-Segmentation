@@ -51,6 +51,8 @@ def train(args, dir_checkpoint, model_class, dataset, k_folds, device):
         # run test set
         result = trainer.test(model)
         test_results.append(result[0]["Test Mean Dice"])
+        # for now only one fold
+        # break
 
     print("Test results:")
     print(test_results)
@@ -133,7 +135,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a Unet model on the MM-WHS dataset')
 
     # Other hyperparameters
-    parser.add_argument('--data_dir', default='../data/preprocessed/CT', type=str,
+    parser.add_argument('--data_dir', default='../data/preprocessed/CT/annotated', type=str,
                         help='Directory where to look for the data. For jobs on Lisa, this should be $TMPDIR.')
     parser.add_argument('--epochs', default=10, type=int,
                         help='Max number of epochs')
@@ -149,7 +151,7 @@ if __name__ == '__main__':
                     help='Baseline used') # other option is drit_unet
     
     parser.add_argument('--loss', default="BCE", type=str,
-                        help='Loss used during training') # BCE, DICE or BCE_DICE
+                        help='Loss used during training') # BCE, Dice or DiceBCE
     
     parser.add_argument('--pred', default='MYO', type=str,
                         help='Prediction of which label') # MYO, LV, RV, MYO_RV, MYO_LV_RV

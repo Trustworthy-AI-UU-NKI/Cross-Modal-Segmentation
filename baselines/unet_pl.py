@@ -14,6 +14,17 @@ from monai.transforms import (
 from types import SimpleNamespace
 from monai.losses import DiceLoss
 
+class DiceBCELoss(torch.nn.Module):
+    def __init__(self):
+        super(DiceBCELoss, self).__init__()
+        self.dice_loss = DiceLoss(sigmoid=True)
+        self.bce_loss = BCEWithLogitsLoss()
+
+    def forward(self, inputs, targets):
+        dice_loss = self.dice_loss(inputs, targets)
+        bce_loss = self.bce_loss(inputs, targets)
+        return dice_loss + bce_loss
+
 
 class UNetL(pl.LightningModule):
     def __init__(self, bs, epochs, loss, lr, modality, pred):
@@ -39,6 +50,8 @@ class UNetL(pl.LightningModule):
             self.loss_function = BCEWithLogitsLoss()
         elif loss == "Dice":
             self.loss_function = DiceLoss(sigmoid=True)
+        elif loss == "DiceBCE":
+            self.loss_function = DiceBCELoss()
         else:
             raise ValueError("Loss not supported")
 
