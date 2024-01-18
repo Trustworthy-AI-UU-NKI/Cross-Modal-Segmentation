@@ -49,8 +49,11 @@ def train(train_loader, val_loader, fold, device, args):
             fake_B_temp = model.update_GA(images_a, images_b, labels_a, loss_f_weight_value)
             fake_B_temp1 = fake_image_pool(model.num_fake_inputs, fake_B_temp, model.fake_images_B) # self.fake_images_b = outputs['fake_images_b']
             model.update_DB(images_a, images_b, fake_B_temp1, loss_f_weight_value)
+            # can be combined probably
             model.update_SB(images_a, images_b, labels_a, loss_f_weight_value)
             model.update_SA(images_a, images_b, labels_a, loss_f_weight_value)
+
+            
             fake_A_temp = model.update_GB(images_a, images_b, labels_a, loss_f_weight_value)
             fake_A_temp1 = fake_image_pool(model.num_fake_inputs, fake_A_temp, model.fake_images_A) # self.fake_images_b = outputs['fake_images_b']
             model.update_DA(images_a, images_b, fake_A_temp1, loss_f_weight_value)

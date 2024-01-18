@@ -1,13 +1,76 @@
 import networks
 import torch
 import torch.nn as nn
+from losses import DiscriminatorLossDouble, DiscriminatorLoss, ZeroLoss, GeneratorLoss, SegmentationLossTarget, SegmentationLoss
 
 class DDFSeg(nn.Module):
     def __init__(self, args):
         super(DDFSeg, self).__init__()
-        self.base_lr = args.lr
-        self.num_dake_inputs = 0
-        # etc....
+
+        # hyperparameters
+        self.learning_rate = args.lr
+        self.learning_rate_seg = args.lr67
+        self.learning_rate_5 = args.lr5
+        self.lr_A = args.lr_A
+        self.lr_B = args.lr_B
+        self.num_fake_inputs = 0
+
+        # ??
+        self.fake_pool_A = None
+        self.fake_pool_B = None
+        
+
+        # networks
+        self.discriminator_A = None #DiscriminatorA() # d_A
+        self.discriminator_B = None #DiscriminatorB() # d_B
+        self.discriminator_F = None #DiscriminatorF() # d_F
+        self.encoder_C_AB = None #EncoderShared() # e_c
+        self.encoder_C_A = None #EncoderC() #e_cs
+        self.encoder_C_B = None #EncoderC() # e_ct
+        self.encoder_D_A = None #EncoderD() # e_dA
+        self.encoder_D_B = None #EncoderD() # e_dB
+        self.decoder_AB = None # DecoderShared() # de_c
+        self.decoder_A = None # Decoder() # de_A
+        self.decoder_B = None # Decoder() # de_B
+        self.segmenter = None # Segmenter() # s_A
+
+        # optimizers + according losses
+        # Source (A) Discriminator update
+        self.d_A_trainer = torch.optim.Adam(self.discriminator_A.parameters(), lr=self.learning_rate, beta1=0.5)
+        self.d_A_loss = DiscriminatorLossDouble()
+
+        # Target (B) Discriminator update
+        self.d_B_trainer = torch.optim.Adam(self.discriminator_B.parameters(), lr=self.learning_rate, beta1=0.5)
+        self.d_B_loss = DiscriminatorLoss()
+
+        # Domain specific encoders update --> zero loss
+        self.dif_trainer = torch.optim.Adam(list(self.encoder_D_A.parameters()) + list(self.encoder_D_B.parameters()), lr=self.learning_rate, beta1=0.5)
+        self.dif_loss = ZeroLoss(self.learning_rate_5)
+
+        # Generator update --> de_A_vars+de_c_vars+e_c_vars+e_cs_vars+e_dB_vars
+        self.g_A_trainer = torch.optim.Adam(list(self.decoder_A.parameters()) + list(self.decoder_AB.parameters()) + list(self.encoder_C_AB.parameters()) 
+                                            + list(self.encoder_C_A.parameters() + list(self.encoder_D_B.parameters())), lr=self.learning_rate, beta1=0.5)
+        self.g_loss_A = GeneratorLoss(self.lr_a, self.lr_b)
+
+        # Generator update --> de_B_vars+de_c_vars+e_c_vars+e_ct_vars+e_dA_vars
+        self.g_B_trainer = torch.optim.Adam(list(self.decoder_B.parameters()) + list(self.decoder_AB.parameters()) + list(self.encoder_C_AB.parameters())
+                                            + list(self.encoder_C_B.parameters()) + list(self.encoder_D_A.parameters()), lr=self.learning_rate, beta1=0.5)
+        self.g_loss_B = GeneratorLoss(self.lr_a, self.lr_b)
+
+        # Updating segmentation network via target images
+        self.s_B_trainer = torch.optim.Adam(list(self.encoder_C_AB.parameters()) + list(self.encoder_C_B) + list(self.segmenter.parameters()), lr=self.learning_rate_seg)
+        self.seg_loss_B = SegmentationLossTarget()
+
+        # Updating segmentation network via source images
+        self.s_A_trainer = torch.optim.Adam(list(self.encoder_C_AB.parameters()) + list(self.encoder_C_B) + list(self.segmenter.parameters()), lr=self.learning_rate_seg)
+        self.seg_loss_A = SegmentationLoss()
+
+        # Feature Discriminator (Dis_seg)
+        self.d_F_trainer = torch.optim.Adam(self.discriminator_F.parameters(), lr=self.learning_rate, beta1=0.5)
+        self.d_F_loss = DiscriminatorLoss()
+
+    
+
 
     def initialize_model(self):
     # initialize with gaussian weights (????)
