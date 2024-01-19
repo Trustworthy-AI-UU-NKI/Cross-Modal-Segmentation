@@ -99,7 +99,7 @@ def train(train_loader, val_loader, fold, device, args):
     #     sess.run(tf.assign(self.global_step, epoch + 1))
 
     # decay learning rate
-    if opts.n_ep_decay > -1:
+    if args.n_ep_decay > -1:
         model.update_lr()
 
     # save result image

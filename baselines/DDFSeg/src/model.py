@@ -59,11 +59,11 @@ class DDFSeg(nn.Module):
 
         # Updating segmentation network via target images
         self.s_B_trainer = torch.optim.Adam(list(self.encoder_C_AB.parameters()) + list(self.encoder_C_B) + list(self.segmenter.parameters()), lr=self.learning_rate_seg)
-        self.seg_loss_B = SegmentationLossTarget()
+        self.seg_loss_B = SegmentationLossTarget(self.lr_a, self.lr_b)
 
         # Updating segmentation network via source images
         self.s_A_trainer = torch.optim.Adam(list(self.encoder_C_AB.parameters()) + list(self.encoder_C_B) + list(self.segmenter.parameters()), lr=self.learning_rate_seg)
-        self.seg_loss_A = SegmentationLoss()
+        self.seg_loss_A = SegmentationLoss(self.lr_a, self.lr_b)
 
         # Feature Discriminator (Dis_seg)
         self.d_F_trainer = torch.optim.Adam(self.discriminator_F.parameters(), lr=self.learning_rate, beta1=0.5)
