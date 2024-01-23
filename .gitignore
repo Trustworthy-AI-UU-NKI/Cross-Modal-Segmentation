@@ -1,6 +1,7 @@
 MMWHS_Dataset/
 jobs/
 data/preprocessed
+data/other
 data/__pycache__
 PnpAda_release_data/
 baselines/checkpoints/

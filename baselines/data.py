@@ -21,7 +21,7 @@ from monai.data import Dataset, list_data_collate
 import itertools
 
 class MMWHS_single(pl.LightningDataModule):
-    def __init__(self, target, data_dir, batch_size=4, k_folds=6):
+    def __init__(self, target, data_dir, batch_size=4, k_folds=6, test_data_dir = None):
         super().__init__()
         self.bs = batch_size
         self.k_folds = k_folds
@@ -30,6 +30,10 @@ class MMWHS_single(pl.LightningDataModule):
         self.test_dataset = None
         self.target_labels = target
         self.data_dir = data_dir
+        if test_data_dir is None:
+            self.test_data_dir = data_dir
+        else:
+            self.test_data_dir = test_data_dir
 
     def setup(self):
         # Transform
@@ -70,16 +74,24 @@ class MMWHS_single(pl.LightningDataModule):
 
 
         # Test dataset remains the same
-        test_images = sorted(glob.glob(os.path.join(self.data_dir, "images/case_1019/*.nii.gz")))
-        test_images2 = sorted(glob.glob(os.path.join(self.data_dir, "images/case_1020/*.nii.gz")))
+        test_images = sorted(glob.glob(os.path.join(self.test_data_dir, "images/case_1019/*.nii.gz")))
+        test_images2 = sorted(glob.glob(os.path.join(self.test_data_dir, "images/case_1020/*.nii.gz")))
         test_images = test_images + test_images2
 
-        test_labels = sorted(glob.glob(os.path.join(self.data_dir, "labels/case_1019/*.nii.gz")))
-        test_labels2 = sorted(glob.glob(os.path.join(self.data_dir, "labels/case_1020/*.nii.gz")))
+        test_labels = sorted(glob.glob(os.path.join(self.test_data_dir, "labels/case_1019/*.nii.gz")))
+        test_labels2 = sorted(glob.glob(os.path.join(self.test_data_dir, "labels/case_1020/*.nii.gz")))
         test_labels = test_labels + test_labels2
 
-        test_files = [{"img": img, "seg": seg} for img, seg in zip(test_images, test_labels)]
+        # print(test_labels)
+        # test_files = [{"img": img, "seg": seg} for img, seg in zip(test_images, test_labels)]
 
+        all_images_test = sorted(glob.glob(os.path.join(self.data_dir, "images/case_10*/*.nii.gz")))
+        all_labels_test = sorted(glob.glob(os.path.join(self.data_dir, "labels/case_10*/*.nii.gz")))
+        # print(all_images_test)
+        # print(all_labels_test)
+
+        test_files = [{"img": img, "seg": seg} for img, seg in zip(all_images_test, all_labels_test)]
+        # print(len(test_files))
         # Create a test data set
         self.test_dataset = Dataset(data=test_files, transform=transforms)
     

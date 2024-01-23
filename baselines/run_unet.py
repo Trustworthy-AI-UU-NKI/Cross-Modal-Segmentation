@@ -15,7 +15,7 @@ from monai.transforms import (
     MapLabelValued,
 )
 
-from data import MMWHS_single, MMWHS_double
+from data import MMWHS_single # , MMWHS_double
 
 from sklearn.model_selection import KFold 
 
@@ -64,12 +64,14 @@ def train(args, dir_checkpoint, model_class, dataset, k_folds, device):
 def test(trainer, models, model_class, dataset, k):
     test_results = []
 
-    for i in range(k):
-        pretrained_model = models[i]
+    for pretrained_model in models:
+        print(f"Testing model {pretrained_model}")
         model = model_class.load_from_checkpoint(pretrained_model) 
-        model.test_dataloader = dataset.test_dataloader()
-        result = trainer.test(model)
-        test_results.append(result)
+        test_loader = dataset.test_dataloader() 
+        model.test_dataloader = lambda: test_loader
+        result = trainer.test(model, dataloaders=test_loader)
+        print("hier?")
+        test_results.append(result[0]["Test Mean Dice"])
 
     print("Test results:")
     print(test_results)
@@ -81,7 +83,9 @@ def main(args):
 
     pl.seed_everything(args.seed)
 
-    filename = f'LR_{args.lr}_BS_{args.bs}_modality_{args.modality}_epochs_{args.epochs}_label_{args.pred}_loss_{args.loss}_model_{args.model}_folds_{args.k_folds}'    
+    # filename = f'Model_{args.model}_LR_{args.lr}_BS_{args.bs}_modality_{args.modality}_epochs_{args.epochs}_label_{args.pred}_loss_{args.loss}_model_{args.model}_folds_{args.k_folds}'    
+    filename = f'LR_{args.lr}_BS_{args.bs}_modality_{args.modality}_epochs_{args.epochs}_label_{args.pred}_loss_{args.loss}_model_{args.model}'    
+    
     dir_checkpoint = os.path.join('checkpoints/', filename)
     os.makedirs(dir_checkpoint, exist_ok=True)
     logger = TensorBoardLogger('checkpoints/', name=filename)
@@ -97,10 +101,14 @@ def main(args):
         model_class = UNetL
         dataset = MMWHS_single(target = labels, data_dir = args.data_dir, batch_size=args.bs, k_folds=args.k_folds)
         dataset.setup()
-    if args.model == 'drit_unet':
+    elif args.model == 'drit_unet':
         model_class = UNetL
-        dataset = MMWHS_double(target = labels, data_dir = args.data_dir, batch_size=args.bs, k_folds=args.k_folds, mod=args.modality)
+        dataset = MMWHS_single(target = labels, data_dir = args.data_dir, batch_size=args.bs, k_folds=args.k_folds, test_data_dir=args.test_data_dir)
         dataset.setup()
+    elif args.model == 'drit_unet_ft':
+        model_class = UNetL
+        #dataset = MMWHS_double(target = labels, data_dir = args.data_dir, batch_size=args.bs, k_folds=args.k_folds, mod=args.modality)
+        #dataset.setup()
     else:
         print("Model not implemented")
 
@@ -112,6 +120,7 @@ def main(args):
     elif args.mode == "test":
         # Check whether pretrained model exists. If yes, load it and skip training
         pretrained_filenames = glob.glob(os.path.join(dir_checkpoint, "*.ckpt"))
+        
         # TO DO: adjust for k-fold cross-validation
         if os.path.isfile(pretrained_filenames[0]):
             print(f"Found pretrained model, loading...")
@@ -135,8 +144,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a Unet model on the MM-WHS dataset')
 
     # Other hyperparameters
-    parser.add_argument('--data_dir', default='../data/preprocessed/CT/annotated', type=str,
+    parser.add_argument('--data_dir', default='../data/preprocessed/MRI_fake2/using_annotated_feature_wise', type=str,
                         help='Directory where to look for the data. For jobs on Lisa, this should be $TMPDIR.')
+    parser.add_argument('--test_data_dir', default='../data/preprocessed/MRI_fake2/using_annotated_feature_wise', type=str,
+                        help='Directory where to look for the test data.')
+    
     parser.add_argument('--epochs', default=10, type=int,
                         help='Max number of epochs')
     parser.add_argument('--seed', default=42, type=int,
