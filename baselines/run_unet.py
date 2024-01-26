@@ -52,7 +52,7 @@ def train(args, dir_checkpoint, model_class, dataset, k_folds, device):
         result = trainer.test(model)
         test_results.append(result[0]["Test Mean Dice"])
         # for now only one fold
-        # break
+        break
 
     print("Test results:")
     print(test_results)
@@ -83,7 +83,7 @@ def main(args):
 
     pl.seed_everything(args.seed)
 
-    # filename = f'Model_{args.model}_LR_{args.lr}_BS_{args.bs}_modality_{args.modality}_epochs_{args.epochs}_label_{args.pred}_loss_{args.loss}_model_{args.model}_folds_{args.k_folds}'    
+    # filename = f'Name_{args.name}_LR_{args.lr}_BS_{args.bs}_modality_{args.modality}_epochs_{args.epochs}_label_{args.pred}_loss_{args.loss}_model_{args.model}_folds_{args.k_folds}'    
     filename = f'LR_{args.lr}_BS_{args.bs}_modality_{args.modality}_epochs_{args.epochs}_label_{args.pred}_loss_{args.loss}_model_{args.model}'    
     
     dir_checkpoint = os.path.join('checkpoints/', filename)
@@ -99,7 +99,7 @@ def main(args):
     
     if args.model == 'unet':
         model_class = UNetL
-        dataset = MMWHS_single(target = labels, data_dir = args.data_dir, batch_size=args.bs, k_folds=args.k_folds)
+        dataset = MMWHS_single(target = labels, data_dir = args.data_dir, batch_size=args.bs, k_folds=args.k_folds, test_data_dir=args.test_data_dir)
         dataset.setup()
     elif args.model == 'drit_unet':
         model_class = UNetL
@@ -144,9 +144,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a Unet model on the MM-WHS dataset')
 
     # Other hyperparameters
-    parser.add_argument('--data_dir', default='../data/preprocessed/MRI_fake2/using_annotated_feature_wise', type=str,
+    parser.add_argument('--data_dir', default='../data/preprocessed/MRI/annotated', type=str,
                         help='Directory where to look for the data. For jobs on Lisa, this should be $TMPDIR.')
-    parser.add_argument('--test_data_dir', default='../data/preprocessed/MRI_fake2/using_annotated_feature_wise', type=str,
+    parser.add_argument('--test_data_dir', default='../data/preprocessed/MRI_fake5/using_annotated_feature_wise_no_norm', type=str,
                         help='Directory where to look for the test data.')
     
     parser.add_argument('--epochs', default=10, type=int,
@@ -161,7 +161,9 @@ if __name__ == '__main__':
                         help='Learning rate')
     parser.add_argument('--model', default='unet', type=str,
                     help='Baseline used') # other option is drit_unet
-    
+    parser.add_argument('--name', default='trial', type=str,
+                    help='Baseline used') # other option is drit_unet
+
     parser.add_argument('--loss', default="BCE", type=str,
                         help='Loss used during training') # BCE, Dice or DiceBCE
     

@@ -74,21 +74,21 @@ class MMWHS_single(pl.LightningDataModule):
 
 
         # Test dataset remains the same
-        test_images = sorted(glob.glob(os.path.join(self.test_data_dir, "images/case_1019/*.nii.gz")))
-        test_images2 = sorted(glob.glob(os.path.join(self.test_data_dir, "images/case_1020/*.nii.gz")))
-        test_images = test_images + test_images2
+        # test_images = sorted(glob.glob(os.path.join(self.test_data_dir, "images/case_1019/*.nii.gz")))
+        # test_images2 = sorted(glob.glob(os.path.join(self.test_data_dir, "images/case_1020/*.nii.gz")))
+        # test_images = test_images + test_images2
 
-        test_labels = sorted(glob.glob(os.path.join(self.test_data_dir, "labels/case_1019/*.nii.gz")))
-        test_labels2 = sorted(glob.glob(os.path.join(self.test_data_dir, "labels/case_1020/*.nii.gz")))
-        test_labels = test_labels + test_labels2
+        # test_labels = sorted(glob.glob(os.path.join(self.test_data_dir, "labels/case_1019/*.nii.gz")))
+        # test_labels2 = sorted(glob.glob(os.path.join(self.test_data_dir, "labels/case_1020/*.nii.gz")))
+        # test_labels = test_labels + test_labels2
 
-        # print(test_labels)
+        # # print(test_labels)
         # test_files = [{"img": img, "seg": seg} for img, seg in zip(test_images, test_labels)]
 
-        all_images_test = sorted(glob.glob(os.path.join(self.data_dir, "images/case_10*/*.nii.gz")))
-        all_labels_test = sorted(glob.glob(os.path.join(self.data_dir, "labels/case_10*/*.nii.gz")))
-        # print(all_images_test)
-        # print(all_labels_test)
+        all_images_test = sorted(glob.glob(os.path.join(self.test_data_dir, "images/case_10*/*.nii.gz")))
+        all_labels_test = sorted(glob.glob(os.path.join(self.test_data_dir, "labels/case_10*/*.nii.gz")))
+        print(all_images_test)
+        # # print(all_labels_test)
 
         test_files = [{"img": img, "seg": seg} for img, seg in zip(all_images_test, all_labels_test)]
         # print(len(test_files))

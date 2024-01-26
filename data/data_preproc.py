@@ -91,6 +91,7 @@ def create_ct_data(dataset_files, output_dir_image, output_dir_label, spatial_si
 
         for batch in patch_data_loader:
             image = batch[0]["img"]
+            print(image.shape)
             # Convert the torch tensor to a SimpleITK image
             slice_image = sitk.GetImageFromArray(image)
             # Save the 2D slice as a NIfTI file
@@ -101,6 +102,7 @@ def create_ct_data(dataset_files, output_dir_image, output_dir_label, spatial_si
                 slice_label = sitk.GetImageFromArray(label)
                 sitk.WriteImage(slice_label, os.path.join(output_dir_label_file, f"slice_{i}.nii.gz"))
             i += 1
+            quit()
         
         sample += 1
 
@@ -172,17 +174,21 @@ def create_mr_data(dataset_files, output_dir_image, output_dir_label, spatial_si
         patch_data_loader = DataLoader(example_patch_ds, batch_size=1)
 
         for batch in patch_data_loader:
+            print(batch)
             image = batch[0]["img"]
+            print(image.shape)
+
             slice_image = sitk.GetImageFromArray(image)
             # # Save the 2D slice as a NIfTI file
             sitk.WriteImage(slice_image, os.path.join(output_dir_image_file, f"slice_{i}.nii.gz"))
-
+            
             if not only_images:
                 label = batch[0]["seg"]
                 slice_label = sitk.GetImageFromArray(label)
                 # Convert the torch tensor to a SimpleITK image
                 sitk.WriteImage(slice_label, os.path.join(output_dir_label_file, f"slice_{i}.nii.gz"))
             i += 1
+            quit()
         
         sample += 1
 
@@ -249,7 +255,7 @@ if __name__ == '__main__':
     # CT or MRI
     parser.add_argument('--modality', type=str, default="CT",
                         help='name of the scene') 
-    parser.add_argument('--output_folder', type=str, default="preprocessed/",
+    parser.add_argument('--output_folder', type=str, default="preprocessed/test",
                         help='Path to the store directory.')
 
     parser.add_argument('--spatial_size', type=int, default=256,
