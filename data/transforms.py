@@ -6,7 +6,7 @@ from monai.transforms import MapTransform, SpatialCropd, SpatialPadd
 
 
 class CropAroundMaskd2d(MapTransform):
-    def __init__(self, keys, extra_spacing = 1.2):
+    def __init__(self, keys, extra_spacing = 1.3):
         super().__init__(keys)
         self.marge = extra_spacing
 

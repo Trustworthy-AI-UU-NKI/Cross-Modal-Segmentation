@@ -101,14 +101,6 @@ def main(args):
         model_class = UNetL
         dataset = MMWHS_single(target = labels, data_dir = args.data_dir, batch_size=args.bs, k_folds=args.k_folds, test_data_dir=args.test_data_dir)
         dataset.setup()
-    elif args.model == 'drit_unet':
-        model_class = UNetL
-        dataset = MMWHS_single(target = labels, data_dir = args.data_dir, batch_size=args.bs, k_folds=args.k_folds, test_data_dir=args.test_data_dir)
-        dataset.setup()
-    elif args.model == 'drit_unet_ft':
-        model_class = UNetL
-        #dataset = MMWHS_double(target = labels, data_dir = args.data_dir, batch_size=args.bs, k_folds=args.k_folds, mod=args.modality)
-        #dataset.setup()
     else:
         print("Model not implemented")
 
@@ -146,7 +138,7 @@ if __name__ == '__main__':
     # Other hyperparameters
     parser.add_argument('--data_dir', default='../data/preprocessed/MRI/annotated', type=str,
                         help='Directory where to look for the data. For jobs on Lisa, this should be $TMPDIR.')
-    parser.add_argument('--test_data_dir', default='../data/preprocessed/MRI_fake5/using_annotated_feature_wise_no_norm', type=str,
+    parser.add_argument('--test_data_dir', default='../data/preprocessed/MRI/annotated', type=str,
                         help='Directory where to look for the test data.')
     
     parser.add_argument('--epochs', default=10, type=int,
