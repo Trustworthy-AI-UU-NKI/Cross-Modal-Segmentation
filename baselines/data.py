@@ -37,7 +37,7 @@ class MMWHS_single(pl.LightningDataModule):
 
     def setup(self):
         # Transform
-        transforms = Compose(
+        transforms_old = Compose(
             [
                 LoadImaged(keys=["img", "seg"]),
                 EnsureChannelFirstd(keys=["img", "seg"]),
@@ -46,10 +46,21 @@ class MMWHS_single(pl.LightningDataModule):
             ]
         )
 
-        all_images = sorted(glob.glob(os.path.join(self.data_dir, "images/case_10*")))
-        all_labels = sorted(glob.glob(os.path.join(self.data_dir, "labels/case_10*")))
+        transforms = Compose(
+            [
+                LoadImaged(keys=["img", "seg"]),
+                MapLabelValued(keys=["seg"], orig_labels=[1, 2, 3, 4, 5 , 6 , 7], target_labels=self.target_labels),
+            ]
+        )
+
+        all_images = sorted(glob.glob(os.path.join(self.data_dir, "images/case_10[0-1]*")))# + sorted(glob.glob(os.path.join(self.data_dir, "images/case_1020")))
+        all_labels = sorted(glob.glob(os.path.join(self.data_dir, "labels/case_10[0-1]*")))# + sorted(glob.glob(os.path.join(self.data_dir, "labels/case_1020")))
+        
         train_cases = range(0,18)
-    
+        train_images = sorted(all_images[idx] for idx in train_cases)
+
+        print("For ct we have these train images", train_images)
+       
         # Splitting into folds
         kf = KFold(n_splits=self.k_folds, shuffle=True)
         for train_idx, val_idx in kf.split(train_cases):
@@ -59,6 +70,7 @@ class MMWHS_single(pl.LightningDataModule):
             train_labels = [glob.glob(all_labels[idx]+ "/*.nii.gz") for idx in train_idx]
             train_labels = sorted(list(itertools.chain.from_iterable(train_labels)))
             train_files = [{"img": img, "seg": seg} for img, seg in zip(train_images, train_labels)]
+
 
 
             val_images = [glob.glob(all_images[idx]+ "/*.nii.gz") for idx in val_idx]
@@ -72,25 +84,25 @@ class MMWHS_single(pl.LightningDataModule):
 
             self.fold_datasets.append((train_ds, val_ds))
 
-
         # Test dataset remains the same
-        # test_images = sorted(glob.glob(os.path.join(self.test_data_dir, "images/case_1019/*.nii.gz")))
-        # test_images2 = sorted(glob.glob(os.path.join(self.test_data_dir, "images/case_1020/*.nii.gz")))
-        # test_images = test_images + test_images2
+        test_images = sorted(glob.glob(os.path.join(self.test_data_dir, "images/case_1019/*.nii.gz")))
+        test_images2 = sorted(glob.glob(os.path.join(self.test_data_dir, "images/case_1020/*.nii.gz")))
+        test_images = test_images + test_images2
 
-        # test_labels = sorted(glob.glob(os.path.join(self.test_data_dir, "labels/case_1019/*.nii.gz")))
-        # test_labels2 = sorted(glob.glob(os.path.join(self.test_data_dir, "labels/case_1020/*.nii.gz")))
-        # test_labels = test_labels + test_labels2
+        test_labels = sorted(glob.glob(os.path.join(self.test_data_dir, "labels/case_1019/*.nii.gz")))
+        test_labels2 = sorted(glob.glob(os.path.join(self.test_data_dir, "labels/case_1020/*.nii.gz")))
+        test_labels = test_labels + test_labels2
 
         # # print(test_labels)
-        # test_files = [{"img": img, "seg": seg} for img, seg in zip(test_images, test_labels)]
+        test_files = [{"img": img, "seg": seg} for img, seg in zip(test_images, test_labels)]
+        print("test files", test_files)
 
-        all_images_test = sorted(glob.glob(os.path.join(self.test_data_dir, "images/case_10*/*.nii.gz")))
-        all_labels_test = sorted(glob.glob(os.path.join(self.test_data_dir, "labels/case_10*/*.nii.gz")))
-        print(all_images_test)
-        # # print(all_labels_test)
+        # all_images_test = sorted(glob.glob(os.path.join(self.test_data_dir, "images/case_10*/*.nii.gz")))
+        # all_labels_test = sorted(glob.glob(os.path.join(self.test_data_dir, "labels/case_10*/*.nii.gz")))
+        # print(all_images_test)
+        # # # print(all_labels_test)
 
-        test_files = [{"img": img, "seg": seg} for img, seg in zip(all_images_test, all_labels_test)]
+        # test_files = [{"img": img, "seg": seg} for img, seg in zip(all_images_test, all_labels_test)]
         # print(len(test_files))
         # Create a test data set
         self.test_dataset = Dataset(data=test_files, transform=transforms)

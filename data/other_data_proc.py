@@ -18,7 +18,7 @@ import SimpleITK as sitk
 from transforms import *
 
 
-def preprocess_data(transforms, data_dir, output_dir, r1, r2):
+def preprocess_data(transforms, data_dir, output_dir, r1, r2, starting_case = 1001):
     output_dir_image = os.path.join(output_dir, "images")
     output_dir_label = os.path.join(output_dir, "labels")
 
@@ -26,7 +26,7 @@ def preprocess_data(transforms, data_dir, output_dir, r1, r2):
     os.makedirs(output_dir_label, exist_ok=True)
 
     slices = 0
-    sample = 1001
+    sample = starting_case
     
     for i in range(r1, r2):
         file_name = f"case_{sample}"
@@ -77,21 +77,39 @@ def main ():
                 ]
             )
     
-    # FIRST MRI
+    # MRI with GT
     print("MRI")
     data_dir = "other/MR_withGT"    
     output_dir = "other/MR_withGT_proc/annotated/"
-    r1 = 1
-    r2 = 20
-    preprocess_data(transforms, data_dir, output_dir, r1, r2)
+    r1 = 20# 1
+    r2 = 21
+    preprocess_data(transforms, data_dir, output_dir, r1, r2, starting_case = 1020)
 
-    # Second CT
-    print("CT")
-    data_dir = "other/CT_withGT"
+    # # CT with GT
+    # print("CT")
+    # data_dir = "other/CT_withGT"
+    # output_dir = "other/CT_withGT_proc/annotated/"
+    # r1 = 33
+    # r2 = 53
+    # preprocess_data(transforms, data_dir, output_dir, r1, r2)
+
+    # MRI with 'fake' GT
+    print("MRI with fake GT")
+    data_dir = "other/MR_woGT"    
+    output_dir = "other/MR_withGT_proc/annotated/"
+    r1 = 21
+    r2 = 47
+    starting_case = 1021
+    preprocess_data(transforms, data_dir, output_dir, r1, r2, starting_case = starting_case)
+
+    # CT with 'fake' GT
+    print("CT with fake GT")
+    data_dir = "other/CT_woGT"
     output_dir = "other/CT_withGT_proc/annotated/"
-    r1 = 33
-    r2 = 53
-    preprocess_data(transforms, data_dir, output_dir, r1, r2)
+    r1 = 1
+    r2 = 33
+    starting_case = 1021
+    preprocess_data(transforms, data_dir, output_dir, r1, r2, starting_case = starting_case)
 
 
 if __name__ == "__main__":
