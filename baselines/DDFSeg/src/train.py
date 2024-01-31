@@ -46,7 +46,8 @@ def train(train_loader, val_loader, fold, device, args):
             labels_a = labels_a.to(device).detach()
 
             # update model
-            fake_B_temp = model.update_GA(images_a, images_b, labels_a, loss_f_weight_value)
+            # fake_B_temp is from A and fake_A_temp is from B
+            fake_B_temp, fake_A_temp = model.update_GB(images_a, images_b, labels_a, loss_f_weight_value)
             fake_B_temp1 = fake_image_pool(model.num_fake_inputs, fake_B_temp, model.fake_images_B) # self.fake_images_b = outputs['fake_images_b']
             model.update_DB(images_a, images_b, fake_B_temp1, loss_f_weight_value)
             # can be combined probably
@@ -54,7 +55,7 @@ def train(train_loader, val_loader, fold, device, args):
             model.update_SA(images_a, images_b, labels_a, loss_f_weight_value)
 
             
-            fake_A_temp = model.update_GB(images_a, images_b, labels_a, loss_f_weight_value)
+            
             fake_A_temp1 = fake_image_pool(model.num_fake_inputs, fake_A_temp, model.fake_images_A) # self.fake_images_b = outputs['fake_images_b']
             model.update_DA(images_a, images_b, fake_A_temp1, loss_f_weight_value)
             model.update_DF(images_a, images_b, loss_f_weight_value)

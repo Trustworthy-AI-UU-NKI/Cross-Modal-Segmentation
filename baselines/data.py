@@ -95,16 +95,17 @@ class MMWHS_single(pl.LightningDataModule):
 
         # # print(test_labels)
         test_files = [{"img": img, "seg": seg} for img, seg in zip(test_images, test_labels)]
-        print("test files", test_files)
+        
 
         # all_images_test = sorted(glob.glob(os.path.join(self.test_data_dir, "images/case_10*/*.nii.gz")))
         # all_labels_test = sorted(glob.glob(os.path.join(self.test_data_dir, "labels/case_10*/*.nii.gz")))
-        # print(all_images_test)
-        # # # print(all_labels_test)
+        # # print(all_images_test)
+        # # # # print(all_labels_test)
 
         # test_files = [{"img": img, "seg": seg} for img, seg in zip(all_images_test, all_labels_test)]
         # print(len(test_files))
         # Create a test data set
+        # print("test files", test_files)
         self.test_dataset = Dataset(data=test_files, transform=transforms)
     
     def set_current_fold(self, fold):

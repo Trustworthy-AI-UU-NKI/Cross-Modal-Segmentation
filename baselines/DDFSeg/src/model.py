@@ -1,10 +1,13 @@
 import networks
 import torch
 import torch.nn as nn
-from losses import DiscriminatorLossDouble, DiscriminatorLoss, ZeroLoss, GeneratorLoss, SegmentationLossTarget, SegmentationLoss
+import numpy as np
+from losses import *
+from networks import *
+
 
 class DDFSeg(nn.Module):
-    def __init__(self, args):
+    def __init__(self, args, pool_size = 50):
         super(DDFSeg, self).__init__()
 
         # hyperparameters
@@ -14,25 +17,34 @@ class DDFSeg(nn.Module):
         self.lr_A = args.lr_A
         self.lr_B = args.lr_B
         self.num_fake_inputs = 0
+        self._pool_size = pool_size
+        self.bs = args.bs
+        self.img_res = args.resolution
+        self.skip = args.skip # (True)
+        self.keep_rate = args.keep_rate # 0.75 --> BEHALVE 559??
 
-        # ??
-        self.fake_pool_A = None
-        self.fake_pool_B = None
+        
+        self.fake_images_A = np.zeros(
+            (self._pool_size, self.bs, 1, self.img_res, self.img_res)
+        )
+        self.fake_images_B = np.zeros(
+            (self._pool_size, self.bs, 1, self.img_res, self.img_res)
+        )
         
 
         # networks
-        self.discriminator_A = None #DiscriminatorA() # d_A
-        self.discriminator_B = None #DiscriminatorB() # d_B
-        self.discriminator_F = None #DiscriminatorF() # d_F
-        self.encoder_C_AB = None #EncoderShared() # e_c
-        self.encoder_C_A = None #EncoderC() #e_cs
-        self.encoder_C_B = None #EncoderC() # e_ct
-        self.encoder_D_A = None #EncoderD() # e_dA
-        self.encoder_D_B = None #EncoderD() # e_dB
-        self.decoder_AB = None # DecoderShared() # de_c
-        self.decoder_A = None # Decoder() # de_A
-        self.decoder_B = None # Decoder() # de_B
-        self.segmenter = None # Segmenter() # s_A
+        self.discriminator_A = Discriminator() # d_A
+        self.discriminator_B = Discriminator() # d_B
+        self.discriminator_F = Discriminator() # d_F
+        self.encoder_C_AB = EncoderCShared(keep_rate=self.keep_rate) # e_c
+        self.encoder_C_A = EncoderC(keep_rate=self.keep_rate) #e_cs
+        self.encoder_C_B = EncoderC(keep_rate=self.keep_rate) # e_ct
+        self.encoder_D_A = EncoderS(keep_rate=self.keep_rate) # e_dA
+        self.encoder_D_B = EncoderS(keep_rate=self.keep_rate) # e_dB
+        self.decoder_AB = DecoderShared() # de_c
+        self.decoder_A = Decoder(skip=self.skip) # de_A
+        self.decoder_B = Decoder(skip=self.skip) # de_B
+        self.segmenter = SegmentationNetwork(keep_rate=self.keep_rate) # s_A
 
         # optimizers + according losses
         # Source (A) Discriminator update
@@ -69,12 +81,7 @@ class DDFSeg(nn.Module):
         self.d_F_trainer = torch.optim.Adam(self.discriminator_F.parameters(), lr=self.learning_rate, beta1=0.5)
         self.d_F_loss = DiscriminatorLoss()
 
-    
 
-
-    def initialize_model(self):
-    # initialize with gaussian weights (????)
-        self.disA.apply(networks.gaussian_weights_init)
     
     # Set scheduler??
     
@@ -82,27 +89,78 @@ class DDFSeg(nn.Module):
         self.num_fake_inputs += 1
 
 
+    def set_lr_scheduler(self, last_ep=0):
+        # TO DO
+        # self.d_A_trainer_sch = get_
+        return
 
     def setgpu(self, gpu):
         self.gpu = gpu
-        self.parts.cuda(self.gpu)
+        self.encoder_C_AB.cuda(self.gpu)
+        self.encoder_C_A.cuda(self.gpu)
+        self.encoder_C_B.cuda(self.gpu)
+        self.encoder_D_A.cuda(self.gpu)
+        self.encoder_D_B.cuda(self.gpu)
+        self.decoder_AB.cuda(self.gpu)
+        self.decoder_A.cuda(self.gpu)
+        self.decoder_B.cuda(self.gpu)
+        self.segmenter.cuda(self.gpu)
+        self.discriminator_A.cuda(self.gpu)
+        self.discriminator_B.cuda(self.gpu)
+
+
         # etc
 
-    def forward(self, x):
-        # TO DO
-        return x
+    # Forward pass through the network --> only encoders and decoders 
+    def forward(self, images_a, images_b):
+        latent_tmpa = self.encoder_C_AB(images_a)
+        latent_a = self.encoder_C_A(latent_tmpa)
+        
+        latent_tmpb = self.encoder_C_AB(images_b)
+        latent_b = self.encoder_C_B(latent_tmpb)
 
-    def update_parts(self):
-        # TO DO
-        self.parts_optimizer.zero_grad()
-        loss = self.backward()
-        self.loss_item = loss.item()
-        self.parts_optimizer.step()
+        pred_mask_b = self.forward_segmentation(images_b)
+
+        latent_a_diff = self.encoder_D_A(images_a)
+        latent_b_diff = self.encoder_D_B(images_b)
+
+        fake_images_tmp_b = self.decoder_AB(torch.cat((latent_a, latent_b_diff), dim=1))
+        fake_images_b = self.decoder_B(fake_images_tmp_b, images_a)
+
+        fake_images_tmp_a = self.decoder_AB(torch.cat((latent_b, latent_a_diff), dim=1))
+        fake_images_a = self.decoder_A(fake_images_tmp_a, images_b)
+
+        return fake_images_a, fake_images_b
 
 
 
-    def update_GA(self, images_a, images_b, labels_a, loss_f_weight_value):
-        # Optimizing the G_A network
+
+    def backward_G():
+        
+
+    def update_G(self, images_a, images_b, labels_a, loss_f_weight_value):
+        # forward pass through the generator network
+        fake_images_a, fake_images_a, cycle_images_a, cycle_images_b = self.forward_generator(images_a, images_b)
+
+        loss_gA = self.g_loss_A_item(prob_fake_x_is_real, images_a, images_b, cycle_input_a=cycle_images_a, cycle_input_b=cycle_images_b)
+        loss_gB = self.g_loss_B_item(prob_fake_x_is_real, images_a, images_b, cycle_input_a=cycle_images_a, cycle_input_b=cycle_images_b)
+        
+        # update GA 
+        self.g_A_trainer.zero_grad()
+        loss_gA.backward(retain_graph=True)
+        self.g_loss_A_item = loss_gA.item()
+        self.g_A_trainer.step()
+
+        # and update GB
+        self.g_B_trainer.zero_grad()
+        loss_gB.backward()
+        self.g_loss_B_item = loss_gB.item()
+        self.g_B_trainer.step()
+
+
+        return fake_B_temp, fake_A_temp 
+
+
         # fake_B_temp B is the result of exectuting self.fake_images_b ????
         #sess.run exectutes [] with the settings of the feed_dict
         # _, fake_B_temp, summary_str = sess.run(
@@ -118,7 +176,6 @@ class DDFSeg(nn.Module):
         #             inputs['gts_i'],
         #         self.learning_rate: curr_lr,
         #         self.keep_rate:keep_rate_value,
-        #         self.is_training:is_training_value,
         #         self.loss_f_weight: loss_f_weight_value,
         #     }
         # )

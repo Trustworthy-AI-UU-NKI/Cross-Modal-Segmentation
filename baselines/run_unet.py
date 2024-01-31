@@ -136,9 +136,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a Unet model on the MM-WHS dataset')
 
     # Other hyperparameters
-    parser.add_argument('--data_dir', default='../data/other/CT_withGT_proc/annotated', type=str,
+    parser.add_argument('--data_dir', default='../data/other/MR_withGT_proc/annotated', type=str,
                         help='Directory where to look for the data. For jobs on Lisa, this should be $TMPDIR.')
-    parser.add_argument('--test_data_dir', default='../data/other/CT_withGT_proc/annotated', type=str,
+    parser.add_argument('--test_data_dir', default='../data/other/MR_withGT_proc/annotated', type=str,
                         help='Directory where to look for the test data.')
     
     parser.add_argument('--epochs', default=10, type=int,
