@@ -33,7 +33,7 @@ class DDFSeg(nn.Module):
         
 
         # networks
-        self.discriminator_A = Discriminator() # d_A
+        self.discriminator_A = Discriminator(aux=True) # d_A
         self.discriminator_B = Discriminator() # d_B
         self.discriminator_F = Discriminator() # d_F
         self.encoder_C_AB = EncoderCShared(keep_rate=self.keep_rate) # e_c
@@ -112,23 +112,69 @@ class DDFSeg(nn.Module):
         # etc
 
     # Forward pass through the network --> only encoders and decoders 
-    def forward(self, images_a, images_b):
+    def forward(self, images_a, images_b, fake_pool_a, fake_pool_b):
         latent_tmpa = self.encoder_C_AB(images_a)
         latent_a = self.encoder_C_A(latent_tmpa)
-        
+
         latent_tmpb = self.encoder_C_AB(images_b)
         latent_b = self.encoder_C_B(latent_tmpb)
 
-        pred_mask_b = self.forward_segmentation(images_b)
+        pred_mask_b = self.segmenter(latent_b)
 
         latent_a_diff = self.encoder_D_A(images_a)
         latent_b_diff = self.encoder_D_B(images_b)
+
+        A_separate_B = self.encoder_D_B(images_a)
+        B_separate_A = self.encoder_D_A(images_b)
 
         fake_images_tmp_b = self.decoder_AB(torch.cat((latent_a, latent_b_diff), dim=1))
         fake_images_b = self.decoder_B(fake_images_tmp_b, images_a)
 
         fake_images_tmp_a = self.decoder_AB(torch.cat((latent_b, latent_a_diff), dim=1))
         fake_images_a = self.decoder_A(fake_images_tmp_a, images_b)
+
+
+        # cross cycle
+
+        latent_fake_atmp = self.encoder_C_AB(fake_images_a)
+        latent_fake_a = self.encoder_C_A(latent_fake_atmp)
+
+        latent_fake_btmp = self.encoder_C_AB(fake_images_b)
+        latent_fake_b = self.encoder_C_B(latent_fake_btmp)
+
+        latent_fa_diff = self.encoder_D_A(fake_images_a)
+        latent_fb_diff = self.encoder_D_B(fake_images_b)
+
+        FA_separate_B = self.encoder_D_B(fake_images_a)
+        FB_separate_A = self.encoder_D_A(fake_images_b)
+
+        cycle_images_tmp_b = self.decoder_AB(torch.cat((latent_fake_a, latent_fb_diff), dim=1))
+        cycle_images_b = self.decoder_B(cycle_images_tmp_b, fake_images_a)
+
+        cycle_images_tmp_a = self.decoder_AB(torch.cat((latent_fake_b, latent_fa_diff), dim=1))
+        cycle_images_a = self.decoder_A(cycle_images_tmp_a, fake_images_b)
+
+
+        pred_mask_fake_b = self.segmenter(latent_fake_b)
+        pred_mask_real_a = self.segmenter(latent_a)
+
+
+        # Discriminators
+
+        prob_real_a_is_real, prob_real_a_aux = self.discriminator_A(images_a)
+        prob_real_b_is_real = self.discriminator_B(images_b)
+
+        prob_fake_a_is_real, prob_fake_a_aux_is_real = self.discriminator_A(fake_images_a)
+        prob_fake_b_is_real = self.discriminator_B(fake_images_b)
+
+        prob_fake_pool_a_is_real, prob_fake_pool_a_aux_is_real = self.discriminator_A(fake_pool_a)
+        prob_fake_pool_b_is_real = self.discriminator_B(fake_pool_b)
+
+        prob_cycle_a_is_real, prob_cycle_a_aux_is_real = self.discriminator_A(cycle_images_a)
+        
+        prob_fea_fake_b_is_real = self.discriminator_F(pred_mask_fake_b)
+        prob_fea_b_is_real = self.discriminator_F(pred_mask_b)
+
 
         return fake_images_a, fake_images_b
 
