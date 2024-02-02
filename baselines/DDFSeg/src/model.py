@@ -4,6 +4,7 @@ import torch.nn as nn
 import numpy as np
 from losses import *
 from networks import *
+import random
 
 
 class DDFSeg(nn.Module):
@@ -30,7 +31,6 @@ class DDFSeg(nn.Module):
         self.fake_images_B = np.zeros(
             (self._pool_size, self.bs, 1, self.img_res, self.img_res)
         )
-        
 
         # networks
         self.discriminator_A = Discriminator(aux=True) # d_A
@@ -93,6 +93,35 @@ class DDFSeg(nn.Module):
         # TO DO
         # self.d_A_trainer_sch = get_
         return
+    
+
+    def fake_image_pool_A(self, fake):
+        if self.num_fake_inputs < self._pool_size:
+            self.fake_images_A[self.num_fake_inputs] = fake
+            return fake
+        else:
+            p = random.random()
+            if p > 0.5:
+                random_id = random.randint(0, self._pool_size - 1)
+                temp = self.fake_images_A[random_id]
+                self.fake_images_A[random_id] = fake
+                return temp
+            else:
+                return fake
+            
+    def fake_image_pool_B(self, fake):
+        if self.num_fake_inputs < self._pool_size:
+            self.fake_images_B[self.num_fake_inputs] = fake
+            return fake
+        else:
+            p = random.random()
+            if p > 0.5:
+                random_id = random.randint(0, self._pool_size - 1)
+                temp = self.fake_images_B[random_id]
+                self.fake_images_B[random_id] = fake
+                return temp
+            else:
+                return fake
 
     def setgpu(self, gpu):
         self.gpu = gpu
@@ -112,46 +141,39 @@ class DDFSeg(nn.Module):
         # etc
 
     # Forward pass through the network --> only encoders and decoders 
-    def forward(self, images_a, images_b, fake_pool_a, fake_pool_b):
+    def forward(self, images_a, images_b):
         latent_tmpa = self.encoder_C_AB(images_a)
-        latent_a = self.encoder_C_A(latent_tmpa)
-
         latent_tmpb = self.encoder_C_AB(images_b)
+        latent_a = self.encoder_C_A(latent_tmpa)
         latent_b = self.encoder_C_B(latent_tmpb)
 
         pred_mask_b = self.segmenter(latent_b)
 
         latent_a_diff = self.encoder_D_A(images_a)
         latent_b_diff = self.encoder_D_B(images_b)
-
         A_separate_B = self.encoder_D_B(images_a)
         B_separate_A = self.encoder_D_A(images_b)
 
         fake_images_tmp_b = self.decoder_AB(torch.cat((latent_a, latent_b_diff), dim=1))
-        fake_images_b = self.decoder_B(fake_images_tmp_b, images_a)
-
         fake_images_tmp_a = self.decoder_AB(torch.cat((latent_b, latent_a_diff), dim=1))
+        fake_images_b = self.decoder_B(fake_images_tmp_b, images_a)
         fake_images_a = self.decoder_A(fake_images_tmp_a, images_b)
 
-
-        # cross cycle
+        # Cross cycle
 
         latent_fake_atmp = self.encoder_C_AB(fake_images_a)
-        latent_fake_a = self.encoder_C_A(latent_fake_atmp)
-
         latent_fake_btmp = self.encoder_C_AB(fake_images_b)
+        latent_fake_a = self.encoder_C_A(latent_fake_atmp)
         latent_fake_b = self.encoder_C_B(latent_fake_btmp)
 
         latent_fa_diff = self.encoder_D_A(fake_images_a)
         latent_fb_diff = self.encoder_D_B(fake_images_b)
-
         FA_separate_B = self.encoder_D_B(fake_images_a)
         FB_separate_A = self.encoder_D_A(fake_images_b)
 
         cycle_images_tmp_b = self.decoder_AB(torch.cat((latent_fake_a, latent_fb_diff), dim=1))
-        cycle_images_b = self.decoder_B(cycle_images_tmp_b, fake_images_a)
-
         cycle_images_tmp_a = self.decoder_AB(torch.cat((latent_fake_b, latent_fa_diff), dim=1))
+        cycle_images_b = self.decoder_B(cycle_images_tmp_b, fake_images_a)
         cycle_images_a = self.decoder_A(cycle_images_tmp_a, fake_images_b)
 
 
@@ -164,202 +186,101 @@ class DDFSeg(nn.Module):
         prob_real_a_is_real, prob_real_a_aux = self.discriminator_A(images_a)
         prob_real_b_is_real = self.discriminator_B(images_b)
 
-        prob_fake_a_is_real, prob_fake_a_aux_is_real = self.discriminator_A(fake_images_a)
-        prob_fake_b_is_real = self.discriminator_B(fake_images_b)
+        prob_cycle_a_is_real, prob_cycle_a_aux_is_real = self.discriminator_A(cycle_images_a.detach())
+
+        prob_fake_a_is_real, prob_fake_a_aux_is_real = self.discriminator_A(fake_images_a.detach())
+        prob_fake_b_is_real = self.discriminator_B(fake_images_b.detach())
+        
+        prob_fea_fake_b_is_real = self.discriminator_F(pred_mask_fake_b.detach())
+        prob_fea_b_is_real = self.discriminator_F(pred_mask_b.detach())
+
+
+        # Update fake pool images and forward pass through last Discriminator
+        fake_pool_a = self.fake_image_pool_A(fake_images_a.detach())
+        fake_pool_b = self.fake_image_pool_B(fake_images_b.detach())
+        self.num_fake_inputs += 1
 
         prob_fake_pool_a_is_real, prob_fake_pool_a_aux_is_real = self.discriminator_A(fake_pool_a)
         prob_fake_pool_b_is_real = self.discriminator_B(fake_pool_b)
 
-        prob_cycle_a_is_real, prob_cycle_a_aux_is_real = self.discriminator_A(cycle_images_a)
-        
-        prob_fea_fake_b_is_real = self.discriminator_F(pred_mask_fake_b)
-        prob_fea_b_is_real = self.discriminator_F(pred_mask_b)
 
-
-        return fake_images_a, fake_images_b
-
-
-
-
-    def backward_G():
-        
+        return {"fake_images_a": fake_images_a,
+                "fake_images_b": fake_images_b,
+                "cycle_images_a": cycle_images_a,
+                "cycle_images_b": cycle_images_b,
+                "prob_fake_a_is_real": prob_fake_a_is_real,
+                "prob_fake_b_is_real": prob_fake_b_is_real,
+                
+                }
+    
 
     def update_G(self, images_a, images_b, labels_a, loss_f_weight_value):
         # forward pass through the generator network
-        fake_images_a, fake_images_a, cycle_images_a, cycle_images_b = self.forward_generator(images_a, images_b)
+        # CHECK where retain_graph = True is nec?
+        #   I think in loss_gA.backward(), loss_sB.backward() and loss_sA.backward() might be an issue?
+        res = self.forward_generator(images_a, images_b)
 
-        loss_gA = self.g_loss_A_item(prob_fake_x_is_real, images_a, images_b, cycle_input_a=cycle_images_a, cycle_input_b=cycle_images_b)
-        loss_gB = self.g_loss_B_item(prob_fake_x_is_real, images_a, images_b, cycle_input_a=cycle_images_a, cycle_input_b=cycle_images_b)
+        loss_gA = self.g_loss_A_item(res["prob_fake_a_is_real"], images_a, images_b, res["cycle_images_a"], res["cycle_images_b"])
+        loss_gB = self.g_loss_B_item(res["prob_fake_b_is_real"], images_a, images_b, res["cycle_images_a"], res["cycle_images_b"])
+        loss_dB = self.d_B_loss(res["prob_real_b_is_real"], res["self.prob_fake_pool_b_is_real"])
+    
+        loss_sB = self.seg_loss_B(res["pred_mask_fake_b"], labels_a, self.segmenter.parameters(), res["prob_fake_b_is_real"], images_a, images_b, 
+                                  res["cycle_images_a"], res["cycle_images_b"], loss_f_weight_value, res["prob_fea_b_is_real"], res["prob_fake_a_aux_is_real"])
+
+        loss_sA = self.seg_loss_A(res["pred_mask_real_a"], labels_a, self.segmenter.parameters(), res["prob_fake_a_is_real"], images_a, images_b,
+                                  res["cycle_images_a"], res["cycle_images_b"])
         
+        loss_dA = self.d_A_loss(res["prob_real_a_is_real"], res["prob_fake_pool_a_is_real"], res["prob_fake_a_is_real"], res["prob_cycle_a_aux_is_real"], res["prob_fake_pool_a_aux_is_real"])
+        loss_dF = self.d_F_loss(res["prob_fea_fake_b_is_real"], res["prob_fea_b_is_real"])
+        loss_diff = self.dif_loss(res["fea_A_separate_B"], res["fea_B_separate_A"], res["fea_FA_separate_B"], res["fea_FB_separate_A"])
+
         # update GA 
         self.g_A_trainer.zero_grad()
         loss_gA.backward(retain_graph=True)
         self.g_loss_A_item = loss_gA.item()
         self.g_A_trainer.step()
 
-        # and update GB
+        # update DB
+        self.d_B_trainer.zero_grad()
+        loss_dB.backward()
+        self.d_B_loss_item = loss_dB.item()
+        self.d_B_trainer.step()
+        
+        # update SB
+        self.s_B_trainer.zero_grad()
+        loss_sB.backward(retain_graph=True)
+        self.s_B_loss_item = loss_sB.item()
+        self.s_B_trainer.step()
+
+        # update SA
+        self.s_A_trainer.zero_grad()
+        loss_sA.backward(retain_graph=True)
+        self.s_A_loss_item = loss_sA.item()
+        self.s_A_trainer.step()
+
+        # update GB
         self.g_B_trainer.zero_grad()
         loss_gB.backward()
         self.g_loss_B_item = loss_gB.item()
         self.g_B_trainer.step()
 
+        # update DA
+        self.d_A_trainer.zero_grad()
+        loss_dA.backward()
+        self.d_A_loss_item = loss_dA.item()
+        self.d_A_trainer.step()
 
-        return fake_B_temp, fake_A_temp 
+        # update DF
+        self.d_F_trainer.zero_grad()
+        loss_dF.backward()
+        self.d_F_loss_item = loss_dF.item()
+        self.d_F_trainer.step()
 
-
-        # fake_B_temp B is the result of exectuting self.fake_images_b ????
-        #sess.run exectutes [] with the settings of the feed_dict
-        # _, fake_B_temp, summary_str = sess.run(
-        #     [self.g_A_trainer,
-        #         self.fake_images_b,
-        #         self.g_A_loss_summ],
-        #     feed_dict={
-        #         self.input_a:
-        #             inputs['images_i'],
-        #         self.input_b:
-        #             inputs['images_j'],
-        #         self.gt_a:
-        #             inputs['gts_i'],
-        #         self.learning_rate: curr_lr,
-        #         self.keep_rate:keep_rate_value,
-        #         self.loss_f_weight: loss_f_weight_value,
-        #     }
-        # )
-        # writer.add_summary(summary_str, epoch * max_inter + i)
-
-
-    def update_DB(self, images_a, images_b, fake_B, loss_f_weight_value):
-        # Optimizing the D_B network
-        # _, summary_str = sess.run(
-        #     [self.d_B_trainer, self.d_B_loss_summ],
-        #     feed_dict={
-        #         self.input_a:
-        #             inputs['images_i'],
-        #         self.input_b:
-        #             inputs['images_j'],
-        #         self.learning_rate: curr_lr,
-        #         self.fake_pool_B: fake_B_temp1,
-        #         self.keep_rate: keep_rate_value,
-        #         self.is_training: is_training_value,
-        #         self.loss_f_weight: loss_f_weight_value,
-        #     }
-        # )
-        # writer.add_summary(summary_str, epoch * max_inter + i)
-
-
-    def update_SB(self, images_a, images_b, labels_a, loss_f_weight_value):
-        # Optimizing the S_B network
-        # _, summary_str = sess.run(
-        #     [self.s_B_trainer, self.s_B_loss_merge_summ],
-        #     feed_dict={
-        #         self.input_a:
-        #             inputs['images_i'],
-        #         self.input_b:
-        #             inputs['images_j'],
-        #         self.gt_a:
-        #             inputs['gts_i'],
-        #         self.learning_rate_seg: curr_lr_seg,
-        #         self.keep_rate: keep_rate_value,
-        #         self.is_training: is_training_value,
-        #         self.loss_f_weight: loss_f_weight_value,
-        #     }
-
-        # )
-        # writer.add_summary(summary_str, epoch * max_inter + i)
-
-
-    def update_SA(self, images_a, images_b, labels_a, loss_f_weight_value):
-        # Optimizing the S_A network
-        # _, summary_str = sess.run(
-        #     [self.s_A_trainer, self.s_B_loss_merge_summ],
-        #     feed_dict={
-        #         self.input_a:
-        #             inputs['images_i'],
-        #         self.input_b:
-        #             inputs['images_j'],
-        #         self.gt_a:
-        #             inputs['gts_i'],
-        #         self.learning_rate_seg: curr_lr_seg,
-        #         self.keep_rate: keep_rate_value,
-        #         self.is_training: is_training_value,
-        #         self.loss_f_weight: loss_f_weight_value,
-        #     }
-
-        # )
-        # writer.add_summary(summary_str, epoch * max_inter + i)
-
-
-    def update_GB(self, images_a, images_b, labels_a, loss_f_weight_value):
-        # Optimizing the G_B network
-        # _, fake_A_temp, summary_str = sess.run(
-        #     [self.g_B_trainer,
-        #         self.fake_images_a,
-        #         self.g_B_loss_summ],
-        #     feed_dict={
-        #         self.input_a:
-        #             inputs['images_i'],
-        #         self.input_b:
-        #             inputs['images_j'],
-        #         self.learning_rate: curr_lr,
-        #         self.gt_a: inputs['gts_i'],
-        #         self.keep_rate: keep_rate_value,
-        #         self.is_training: is_training_value,
-        #         self.loss_f_weight: loss_f_weight_value,
-        #     }
-        # )
-        # writer.add_summary(summary_str, epoch * max_inter + i)
-
-    def update_DA(self, images_a, images_b, fake_A, loss_f_weight_value):
-        # Optimizing the D_A network
-        # _, summary_str = sess.run(
-        #     [self.d_A_trainer, self.d_A_loss_summ],
-        #     feed_dict={
-        #         self.input_a:
-        #             inputs['images_i'],
-        #         self.input_b:
-        #             inputs['images_j'],
-        #         self.learning_rate: curr_lr,
-        #         self.fake_pool_A: fake_A_temp1,
-        #         self.keep_rate: keep_rate_value,
-        #         self.is_training: is_training_value,
-        #         self.loss_f_weight: loss_f_weight_value,
-        #     }
-        # )
-        # writer.add_summary(summary_str, epoch * max_inter + i)
-    
-    def update_DF(self, images_a, images_b, loss_f_weight_value):
-        # Optimizing the D_F network
-        # _, summary_str = sess.run(
-        #     [self.d_F_trainer, self.d_F_loss_summ],
-        #     feed_dict={
-        #         self.input_a:
-        #             inputs['images_i'],
-        #         self.input_b:
-        #             inputs['images_j'],
-        #         self.learning_rate: curr_lr,
-        #         self.keep_rate: keep_rate_value,
-        #         self.is_training: is_training_value,
-        #         self.loss_f_weight: loss_f_weight_value,
-        #     }
-        # )
-        # writer.add_summary(summary_str, epoch * max_inter + i)
-
-    def update_Dif():
-        # Optimizing the Dif network
-        # _, summary_str = sess.run(
-        #     [self.dif_trainer, self.dif_loss_summ],
-        #     feed_dict={
-        #         self.input_a:
-        #                 inputs['images_i'],
-        #         self.input_b:
-        #                 inputs['images_j'],
-        #         self.learning_rate: curr_lr,
-        #         self.keep_rate: keep_rate_value,
-        #         self.is_training: is_training_value,
-        #         self.loss_f_weight: loss_f_weight_value,
-        #     }
-        #     )
-        # writer.add_summary(summary_str, epoch * max_inter + i)
+        # update diff
+        self.dif_trainer.zero_grad()
+        loss_diff.backward()
+        self.dif_loss_item = loss_diff.item()
+        self.dif_trainer.step()
 
     def resume(self, model_dir):
         checkpoint = torch.load(model_dir)

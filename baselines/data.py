@@ -14,6 +14,7 @@ from monai.transforms import (
     EnsureChannelFirstd,
     SqueezeDimd,
     MapLabelValued,
+    ScaleIntensityd,
 )
 
 from monai.data import Dataset, list_data_collate
@@ -49,6 +50,7 @@ class MMWHS_single(pl.LightningDataModule):
         transforms = Compose(
             [
                 LoadImaged(keys=["img", "seg"]),
+                ScaleIntensityd(keys=["img"]),
                 MapLabelValued(keys=["seg"], orig_labels=[1, 2, 3, 4, 5 , 6 , 7], target_labels=self.target_labels),
             ]
         )
