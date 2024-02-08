@@ -23,6 +23,7 @@ class DDFSeg(nn.Module):
         self.img_res = args.resolution
         self.skip = args.skip # (True)
         self.keep_rate = args.keep_rate # 0.75 --> BEHALVE 559??
+        self._num_cls = args.num_cls
 
         
         self.fake_images_A = np.zeros(
@@ -81,9 +82,6 @@ class DDFSeg(nn.Module):
         self.d_F_trainer = torch.optim.Adam(self.discriminator_F.parameters(), lr=self.learning_rate, beta1=0.5)
         self.d_F_loss = DiscriminatorLoss()
 
-
-    
-    # Set scheduler??
     
     def update_num_fake_inputs(self):
         self.num_fake_inputs += 1
@@ -92,6 +90,8 @@ class DDFSeg(nn.Module):
     def set_lr_scheduler(self, last_ep=0):
         # TO DO
         # self.d_A_trainer_sch = get_
+        if last_ep > 0 and last_ep%2==0:
+            curr_lr_seg = np.multiply(curr_lr_seg, 0.9)
         return
     
 
@@ -203,18 +203,31 @@ class DDFSeg(nn.Module):
         prob_fake_pool_a_is_real, prob_fake_pool_a_aux_is_real = self.discriminator_A(fake_pool_a)
         prob_fake_pool_b_is_real = self.discriminator_B(fake_pool_b)
 
-
         return {"fake_images_a": fake_images_a,
                 "fake_images_b": fake_images_b,
                 "cycle_images_a": cycle_images_a,
                 "cycle_images_b": cycle_images_b,
                 "prob_fake_a_is_real": prob_fake_a_is_real,
                 "prob_fake_b_is_real": prob_fake_b_is_real,
-                
-                }
+                "prob_real_b_is_real": prob_real_b_is_real,
+                "prob_real_a_is_real": prob_real_a_is_real,
+                "prob_fake_pool_b_is_real": prob_fake_pool_b_is_real,
+                "prob_fake_pool_a_is_real": prob_fake_pool_a_is_real,
+                "pred_mask_fake_b": pred_mask_fake_b,
+                "prob_fea_b_is_real": prob_fea_b_is_real, 
+                "prob_fake_a_aux_is_real": prob_fake_a_aux_is_real,
+                "pred_mask_real_a": pred_mask_real_a,
+                "prob_cycle_a_aux_is_real": prob_cycle_a_aux_is_real,
+                "prob_fake_pool_a_aux_is_real": prob_fake_pool_a_aux_is_real,
+                "prob_fea_fake_b_is_real": prob_fea_fake_b_is_real,
+                "fea_A_separate_B": A_separate_B,
+                "fea_B_separate_A": B_separate_A,
+                "fea_FA_separate_B": FA_separate_B,
+                "fea_FB_separate_A": FB_separate_A
+        }
     
 
-    def update_G(self, images_a, images_b, labels_a, loss_f_weight_value):
+    def update(self, images_a, images_b, labels_a, loss_f_weight_value):
         # forward pass through the generator network
         # CHECK where retain_graph = True is nec?
         #   I think in loss_gA.backward(), loss_sB.backward() and loss_sA.backward() might be an issue?
@@ -222,7 +235,7 @@ class DDFSeg(nn.Module):
 
         loss_gA = self.g_loss_A_item(res["prob_fake_a_is_real"], images_a, images_b, res["cycle_images_a"], res["cycle_images_b"])
         loss_gB = self.g_loss_B_item(res["prob_fake_b_is_real"], images_a, images_b, res["cycle_images_a"], res["cycle_images_b"])
-        loss_dB = self.d_B_loss(res["prob_real_b_is_real"], res["self.prob_fake_pool_b_is_real"])
+        loss_dB = self.d_B_loss(res["prob_real_b_is_real"], res["prob_fake_pool_b_is_real"])
     
         loss_sB = self.seg_loss_B(res["pred_mask_fake_b"], labels_a, self.segmenter.parameters(), res["prob_fake_b_is_real"], images_a, images_b, 
                                   res["cycle_images_a"], res["cycle_images_b"], loss_f_weight_value, res["prob_fea_b_is_real"], res["prob_fake_a_aux_is_real"])
@@ -289,25 +302,29 @@ class DDFSeg(nn.Module):
     
     def save(self, filename, ep, total_it):
         state = {
-                'disA': self.disA.state_dict(),
-                'disA2': self.disA2.state_dict(),
-                'disB': self.disB.state_dict(),
-                'disB2': self.disB2.state_dict(),
-                'disContent': self.disContent.state_dict(),
-                'enc_c': self.enc_c.state_dict(),
-                'enc_a': self.enc_a.state_dict(),
-                'gen': self.gen.state_dict(),
-                'disA_opt': self.disA_opt.state_dict(),
-                'disA2_opt': self.disA2_opt.state_dict(),
-                'disB_opt': self.disB_opt.state_dict(),
-                'disB2_opt': self.disB2_opt.state_dict(),
-                'disContent_opt': self.disContent_opt.state_dict(),
-                'enc_c_opt': self.enc_c_opt.state_dict(),
-                'enc_a_opt': self.enc_a_opt.state_dict(),
-                'gen_opt': self.gen_opt.state_dict(),
-                'ep': ep,
-                'total_it': total_it
-                }
+                'ep' : ep,
+                'total_it' : total_it,
+                'discriminator_A': self.discriminator_A.state_dict(),
+                'discriminator_B': self.discriminator_B.state_dict(),
+                'discriminator_F': self.discriminator_F.state_dict(),
+                'encoder_C_AB': self.encoder_C_AB.state_dict(),
+                'encoder_C_A': self.encoder_C_A.state_dict(),
+                'encoder_C_B': self.encoder_C_B.state_dict(),
+                'encoder_D_A': self.encoder_D_A.state_dict(),
+                'encoder_D_B': self.encoder_D_B.state_dict(),
+                'decoder_AB': self.decoder_AB.state_dict(),
+                'decoder_A': self.decoder_A.state_dict(),
+                'decoder_B': self.decoder_B.state_dict(),
+                'segmenter': self.segmenter.state_dict(),
+                'd_A_trainer': self.d_A_trainer.state_dict(),
+                'd_B_trainer': self.d_B_trainer.state_dict(),
+                'dif_trainer': self.dif_trainer.state_dict(),
+                'g_A_trainer': self.g_A_trainer.state_dict(),
+                'g_B_trainer': self.g_B_trainer.state_dict(),
+                's_B_trainer': self.s_B_trainer.state_dict(),
+                's_A_trainer': self.s_A_trainer.state_dict(),
+                'd_F_trainer': self.d_F_trainer.state_dict()}
+        
         torch.save(state, filename)
 
 

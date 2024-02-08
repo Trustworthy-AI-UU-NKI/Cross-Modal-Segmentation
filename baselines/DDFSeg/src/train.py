@@ -1,11 +1,14 @@
 import torch
-from dataset import MMWHS_double
+from torch.utils.data import DataLoader
+from dataset import MMWHS
 from saver import Saver
 from model import DDFSeg
 import argparse
 import sys
 import pytorch_lightning as pl
 import numpy as np
+
+from sklearn.model_selection import KFold
 
 
 
@@ -14,17 +17,24 @@ def train(train_loader, val_loader, fold, device, args):
     print('\n--- load model ---')
     model = DDFSeg(args)
     model.setgpu(device)
+
+    # how with different folds? 
+    # if args.resume
+
     # saver for display and output
     saver = Saver(fold, args)
 
+
     # train
     print('\n--- train ---')
+
+
+
 
     total_it = 0
     max_it = 500000 # aanpassen
     for ep in range(args.epochs):
         print("In the epoch ", ep)
-
 
         if ep < 5:
             loss_f_weight_value = 0.0
@@ -33,11 +43,7 @@ def train(train_loader, val_loader, fold, device, args):
         else:
             loss_f_weight_value = 0.1
 
-
-        if ep > 0 and ep%2==0:
-            curr_lr_seg = np.multiply(curr_lr_seg, 0.9)
-
-        for it, (images_a, images_b, labels_a) in enumerate(train_loader):
+        for it, (images_a, labels_a, images_b, ) in enumerate(train_loader):
 
             # input data
             images_a = images_a.to(device).detach()
@@ -46,7 +52,7 @@ def train(train_loader, val_loader, fold, device, args):
 
             # update model
             # fake_B_temp is from A and fake_A_temp is from B
-            model.update()
+            model.update(images_a, images_b, labels_a, loss_f_weight_value)
 
             # I think this is updating the learning rates --> scheduler
             # summary_str_gan, summary_str_seg, summary_str_lossf = sess.run([self.lr_gan_summ, self.lr_seg_summ, self.loss_f_weight_summ],
@@ -103,18 +109,25 @@ def train(train_loader, val_loader, fold, device, args):
 def main(args):
     pl.seed_everything(args.seed)
 
-    # daita loader
-    print('\n--- load dataset ---')
-    dataset = MMWHS_double(args.pred, args.data_dir, batch_size=args.bs, k_folds=args.k_folds, mod=args.modality)
-    dataset.setup()
+    if args.pred == "MYO":
+        labels = [1, 0, 0, 0, 0, 0, 0]
+    else:
+        labels = [1, 1, 1, 1, 1, 1, 1]
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    for fold in range(args.k_folds):
-        print(f"Fold {fold}")
-        dataset.set_current_fold(fold)
-        train_loader, val_loader = dataset.get_dataloaders(fold)
+    source_cases = range(0,20)
+    target_cases = range(0,18)
+    kf = KFold(n_splits=args.k_folds, shuffle=True)
+    fold = 0
+    for fold_source_train, fold_source_val, fold_target_train, fold_target_val  in zip(kf.split(source_cases), kf.split(target_cases)):
+        dataset_train = MMWHS(args, labels, fold_target_train, fold_source_train)
+        train_loader = DataLoader(dataset_train, batch_size=args.bs, shuffle=True, num_workers=4)
+        dataset_val = MMWHS(args, labels, fold_target_val, fold_source_val) 
+        val_loader = DataLoader(dataset_val, batch_size=args.bs, num_workers=4)
+        
         train(train_loader, val_loader, fold, device, args) 
+        fold += 1
         
 
 
@@ -142,8 +155,16 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', default=10, type=int, help='Max number of epochs')
     parser.add_argument('--seed', default=42, type=int,help='Seed to use for reproducing results')
     parser.add_argument('--lr', default=1e-3, type=float, help='Learning rate')
+    parser.add_argument('--lr67', default=1e-3, type=float, help='Learning rate for the segmentor')
+    parser.add_argument('--lr5', default=1e-3, type=float, help='Learning rate for the zero_loss')   
+    parser.add_argument('--lr_A', default=1e-3, type=float, help='Learning rate (lambda A)')
+    parser.add_argument('--lr_B', default=1e-3, type=float, help='Learning rate (lambda B)')
     parser.add_argument('--bs', default=4, type=int,help='batch_size')
-
+    parser.add_argument('--num_cls', default=4, type=int, help='Number of classes')
+    parser.add_argument('--keep_rate', default=0.75, type=float, help='Keep rate for dropout')
+    parser.add_argument('--resolution', default=256, type=int, help='Resolution of input images')
+    parser.add_argument('--skip', default=True, type=bool, help='Skip connection in the generator')
+    
     argv = sys.argv[sys.argv.index("--") + 1:]
     args = parser.parse_args(argv)
 

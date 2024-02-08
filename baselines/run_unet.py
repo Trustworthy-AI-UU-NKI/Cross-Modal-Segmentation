@@ -33,9 +33,9 @@ def train(args, dir_checkpoint, model_class, dataset, k_folds, device):
                             callbacks=ModelCheckpoint(
                             save_weights_only=True,
                             dirpath=dir_checkpoint,
-                            filename = "{fold}_{epoch}-{Validation loss:.4f}",
-                            monitor="Validation loss",
-                            mode="min",
+                            filename = "{epoch}-{Validation Mean Dice:.4f}",
+                            monitor="Validation Mean Dice",
+                            mode="max",
                             save_top_k=1,
                         ))
         model = model_class(args.bs, args.epochs, args.loss, args.lr, args.modality, args.pred)
