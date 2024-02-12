@@ -8,9 +8,13 @@ from torch.utils.data import Dataset
 from monai.transforms import Compose, LoadImage, MapLabelValue
 
 class MMWHS(Dataset):
-  def __init__(self, args, fold_target, fold_source):
-    self.data_1 = args.data_dir1 # source data
-    self.data_2 = args.data_dir2 # target data
+  def __init__(self, args, labels, fold_target, fold_source):
+    self.data_dir1 = args.data_dir1 # source data
+    self.data_dir2 = args.data_dir2 # target data
+    self.target_labels = labels
+
+    print("source_folds", fold_source)
+    print("target_folds", fold_target)
 
     self.all_source_images = sorted(glob.glob(os.path.join(self.data_dir1, "images/case_10*")))
     self.all_source_labels = sorted(glob.glob(os.path.join(self.data_dir1, "labels/case_10*")))
@@ -26,7 +30,7 @@ class MMWHS(Dataset):
         
     self.source_size = len(self.images_source)
     self.target_size = len(self.images_target)
-    self.dataset_size = max(self.A_size, self.B_size)
+    self.dataset_size = max(self.source_size, self.target_size)
 
 
     self.transforms_seg = Compose(

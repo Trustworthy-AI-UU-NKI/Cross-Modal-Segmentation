@@ -163,7 +163,7 @@ class GeneralConv2d(nn.Module):
                               bias=(not do_norm))  # No bias if normalization is applied
 
         # Weight initialization
-        nn.init.truncated_normal_(self.conv.weight, std=stddev)
+        nn.init.trunc_normal_(self.conv.weight, std=stddev)
         if bias_init:
             nn.init.constant_(self.conv.bias, 0.0)
 
@@ -213,7 +213,7 @@ class DilateConv2d(nn.Module):
                               dilation=dilation_rate, padding=padding, bias=False)
 
         # Weight and bias initialization
-        nn.init.truncated_normal_(self.conv.weight, std=stddev)
+        nn.init.trunc_normal_(self.conv.weight, std=stddev)
         self.conv.bias = nn.Parameter(torch.zeros(output_channels))
 
         # Dropout
@@ -260,7 +260,7 @@ class GeneralDeconv2d(nn.Module):
         self.conv = nn.ConvTranspose2d(input_channels, output_channels, kernel_size, stride=stride, padding=padding)
 
         # Weight and bias initialization
-        nn.init.truncated_normal_(self.conv.weight, std=stddev)
+        nn.init.trunc_normal_(self.conv.weight, std=stddev)
         nn.init.constant_(self.conv.bias, 0.0)
 
         # Normalization

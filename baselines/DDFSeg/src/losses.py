@@ -42,13 +42,13 @@ class ZeroLoss(nn.Module):
     def __init__(self, lr = 0.01):
         super(ZeroLoss, self).__init__()
         self.l1_loss = torch.nn.L1Loss()
-        self.lr =lr # lr5
+        self.lr = lr # lr5
 
     def forward(self, fea_A_separate_B, fea_B_separate_A, fea_FA_separate_B, fea_FB_separate_A):
-        lossea = 0.01 * self.l1_loss(fea_A_separate_B, torch.zeros_like(fea_A_separate_B))
-        lossesb = 0.01 * self.l1_loss(fea_B_separate_A, torch.zeros_like(fea_B_separate_A))
-        lossesaf = 0.01 * self.l1_loss(fea_FA_separate_B, torch.zeros_like(fea_FA_separate_B))
-        lossesbf = 0.01 * self.l1_loss(fea_FB_separate_A, torch.zeros_like(fea_FB_separate_A))
+        lossea = self.lr * self.l1_loss(fea_A_separate_B, torch.zeros_like(fea_A_separate_B))
+        lossesb = self.lr * self.l1_loss(fea_B_separate_A, torch.zeros_like(fea_B_separate_A))
+        lossesaf = self.lr * self.l1_loss(fea_FA_separate_B, torch.zeros_like(fea_FA_separate_B))
+        lossesbf = self.lr * self.l1_loss(fea_FB_separate_A, torch.zeros_like(fea_FB_separate_A))
         return lossea + lossesb + lossesaf + lossesbf
     
 

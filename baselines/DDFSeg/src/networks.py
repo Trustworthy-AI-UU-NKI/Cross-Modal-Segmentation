@@ -13,13 +13,13 @@ from layers import *
 
 
 class Discriminator(nn.Module):
-    def __init__(self, aux=False):
+    def __init__(self, channels_in=1, aux=False):
         super(Discriminator, self).__init__()
         self.aux = aux
-        self.conv1 = GeneralConv2d(1, 64, kernel_size=4, stride=2, stddev=0.02, padding=0, do_norm=False, relufactor=0.2, norm_type='Ins')
-        self.conv2 = GeneralConv2d(64, 128, kernel_size=4, stride=2, stddev=0.02, padding=0, relufactor=0.2, norm_type='Ins')
-        self.conv3 = GeneralConv2d(128, 256, kernel_size=4, stride=2, stddev=0.02, padding=0, relufactor=0.2, norm_type='Ins')
-        self.conv4 = GeneralConv2d(256, 512, kernel_size=4, stride=1, stddev=0.02, padding=0, relufactor=0.2, norm_type='Ins')
+        self.conv1 = GeneralConv2d(channels_in, 64, kernel_size=4, stride=2, stddev=0.02, padding=0, do_norm=False, relu_factor=0.2, norm_type='Ins')
+        self.conv2 = GeneralConv2d(64, 128, kernel_size=4, stride=2, stddev=0.02, padding=0, relu_factor=0.2, norm_type='Ins')
+        self.conv3 = GeneralConv2d(128, 256, kernel_size=4, stride=2, stddev=0.02, padding=0, relu_factor=0.2, norm_type='Ins')
+        self.conv4 = GeneralConv2d(256, 512, kernel_size=4, stride=1, stddev=0.02, padding=0, relu_factor=0.2, norm_type='Ins')
         if self.aux:
             self.conv5 = GeneralConv2d(512, 1, kernel_size=4, stride=1, stddev=0.02, padding=0, do_norm=False, do_relu=False)
         else:
@@ -170,7 +170,7 @@ class Decoder(nn.Module):
 ####################################################################
 
 class SegmentationNetwork(nn.Module):
-    def __init__(self, keep_rate=0.75):
+    def __init__(self, num_classes, keep_rate=0.75):
         super(SegmentationNetwork, self).__init__()
         self.layers = nn.Sequential(
             GeneralConv2d(128, 128, kernel_size=3, stride=1, stddev=0.02, padding=1, norm_type="ins", keep_rate=keep_rate),
@@ -181,11 +181,11 @@ class SegmentationNetwork(nn.Module):
             GeneralDeconv2d(128, 64, kernel_size=3, stride=2, stddev=0.02, padding=1, norm_type="ins"),
             GeneralDeconv2d(64, 64, kernel_size=3, stride=2, stddev=0.02, padding=1, norm_type="ins"),
             GeneralDeconv2d(64, 32, kernel_size=3, stride=2, stddev=0.02, padding=1, norm_type="ins"),
-            GeneralConv2d(32, 4, kernel_size=7, stride=1, stddev=0.02, padding=3, do_norm=False, do_relu=False)
+            GeneralConv2d(32, num_classes, kernel_size=7, stride=1, stddev=0.02, padding=3, do_norm=False, do_relu=False)
         )
     
     # input == [B, C, H, W] == [B, 512, 32, 32] --> from EncoderC
-    # output == [B, C, H, W] == [B, 4, 256, 256] --> 4 channels??
+    # output == [B, C, H, W] == [B, 4, 256, 256] --> 4 channels --> num_classes!!??
     def forward(self, x):
         return self.layers(x)
 

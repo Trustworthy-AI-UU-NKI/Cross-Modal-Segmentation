@@ -5,10 +5,11 @@ import numpy as np
 from losses import *
 from networks import *
 import random
+from torch.optim import lr_scheduler
 
 
 class DDFSeg(nn.Module):
-    def __init__(self, args, pool_size = 50):
+    def __init__(self, args, num_classes=2, pool_size = 50):
         super(DDFSeg, self).__init__()
 
         # hyperparameters
@@ -23,7 +24,9 @@ class DDFSeg(nn.Module):
         self.img_res = args.resolution
         self.skip = args.skip # (True)
         self.keep_rate = args.keep_rate # 0.75 --> BEHALVE 559??
-        self._num_cls = args.num_cls
+        self.val_dice = -1
+        self.num_classes = num_classes 
+
 
         
         self.fake_images_A = np.zeros(
@@ -36,7 +39,7 @@ class DDFSeg(nn.Module):
         # networks
         self.discriminator_A = Discriminator(aux=True) # d_A
         self.discriminator_B = Discriminator() # d_B
-        self.discriminator_F = Discriminator() # d_F
+        self.discriminator_F = Discriminator(channels_in=self.num_classes) # d_F
         self.encoder_C_AB = EncoderCShared(keep_rate=self.keep_rate) # e_c
         self.encoder_C_A = EncoderC(keep_rate=self.keep_rate) #e_cs
         self.encoder_C_B = EncoderC(keep_rate=self.keep_rate) # e_ct
@@ -45,41 +48,41 @@ class DDFSeg(nn.Module):
         self.decoder_AB = DecoderShared() # de_c
         self.decoder_A = Decoder(skip=self.skip) # de_A
         self.decoder_B = Decoder(skip=self.skip) # de_B
-        self.segmenter = SegmentationNetwork(keep_rate=self.keep_rate) # s_A
+        self.segmenter = SegmentationNetwork(num_classes=self.num_classes, keep_rate=self.keep_rate) # s_A
 
         # optimizers + according losses
         # Source (A) Discriminator update
-        self.d_A_trainer = torch.optim.Adam(self.discriminator_A.parameters(), lr=self.learning_rate, beta1=0.5)
+        self.d_A_trainer = torch.optim.Adam(self.discriminator_A.parameters(), lr=self.learning_rate, betas=(0.5, 0.999))
         self.d_A_loss = DiscriminatorLossDouble()
 
         # Target (B) Discriminator update
-        self.d_B_trainer = torch.optim.Adam(self.discriminator_B.parameters(), lr=self.learning_rate, beta1=0.5)
+        self.d_B_trainer = torch.optim.Adam(self.discriminator_B.parameters(), lr=self.learning_rate, betas=(0.5, 0.999))
         self.d_B_loss = DiscriminatorLoss()
 
         # Domain specific encoders update --> zero loss
-        self.dif_trainer = torch.optim.Adam(list(self.encoder_D_A.parameters()) + list(self.encoder_D_B.parameters()), lr=self.learning_rate, beta1=0.5)
+        self.dif_trainer = torch.optim.Adam(list(self.encoder_D_A.parameters()) + list(self.encoder_D_B.parameters()), lr=self.learning_rate, betas=(0.5, 0.999))
         self.dif_loss = ZeroLoss(self.learning_rate_5)
 
         # Generator update --> de_A_vars+de_c_vars+e_c_vars+e_cs_vars+e_dB_vars
         self.g_A_trainer = torch.optim.Adam(list(self.decoder_A.parameters()) + list(self.decoder_AB.parameters()) + list(self.encoder_C_AB.parameters()) 
-                                            + list(self.encoder_C_A.parameters() + list(self.encoder_D_B.parameters())), lr=self.learning_rate, beta1=0.5)
-        self.g_loss_A = GeneratorLoss(self.lr_a, self.lr_b)
+                                            + list(self.encoder_C_A.parameters()) + list(self.encoder_D_B.parameters()), lr=self.learning_rate, betas=(0.5, 0.999))
+        self.g_loss_A = GeneratorLoss(self.lr_A, self.lr_B)
 
         # Generator update --> de_B_vars+de_c_vars+e_c_vars+e_ct_vars+e_dA_vars
         self.g_B_trainer = torch.optim.Adam(list(self.decoder_B.parameters()) + list(self.decoder_AB.parameters()) + list(self.encoder_C_AB.parameters())
-                                            + list(self.encoder_C_B.parameters()) + list(self.encoder_D_A.parameters()), lr=self.learning_rate, beta1=0.5)
-        self.g_loss_B = GeneratorLoss(self.lr_a, self.lr_b)
+                                            + list(self.encoder_C_B.parameters()) + list(self.encoder_D_A.parameters()), lr=self.learning_rate, betas=(0.5, 0.999))
+        self.g_loss_B = GeneratorLoss(self.lr_A, self.lr_B)
 
         # Updating segmentation network via target images
-        self.s_B_trainer = torch.optim.Adam(list(self.encoder_C_AB.parameters()) + list(self.encoder_C_B) + list(self.segmenter.parameters()), lr=self.learning_rate_seg)
-        self.seg_loss_B = SegmentationLossTarget(self.lr_a, self.lr_b)
+        self.s_B_trainer = torch.optim.Adam(list(self.encoder_C_AB.parameters()) + list(self.encoder_C_B.parameters()) + list(self.segmenter.parameters()), lr=self.learning_rate_seg)
+        self.seg_loss_B = SegmentationLossTarget(self.lr_A, self.lr_B)
 
         # Updating segmentation network via source images
-        self.s_A_trainer = torch.optim.Adam(list(self.encoder_C_AB.parameters()) + list(self.encoder_C_B) + list(self.segmenter.parameters()), lr=self.learning_rate_seg)
-        self.seg_loss_A = SegmentationLoss(self.lr_a, self.lr_b)
+        self.s_A_trainer = torch.optim.Adam(list(self.encoder_C_AB.parameters()) + list(self.encoder_C_B.parameters()) + list(self.segmenter.parameters()), lr=self.learning_rate_seg)
+        self.seg_loss_A = SegmentationLoss(self.lr_A, self.lr_B)
 
         # Feature Discriminator (Dis_seg)
-        self.d_F_trainer = torch.optim.Adam(self.discriminator_F.parameters(), lr=self.learning_rate, beta1=0.5)
+        self.d_F_trainer = torch.optim.Adam(self.discriminator_F.parameters(), lr=self.learning_rate, betas=(0.5, 0.999))
         self.d_F_loss = DiscriminatorLoss()
 
     
@@ -87,13 +90,32 @@ class DDFSeg(nn.Module):
         self.num_fake_inputs += 1
 
 
-    def set_lr_scheduler(self, last_ep=0):
-        # TO DO
-        # self.d_A_trainer_sch = get_
-        if last_ep > 0 and last_ep%2==0:
-            curr_lr_seg = np.multiply(curr_lr_seg, 0.9)
-        return
+    def set_scheduler(self, last_ep=0):
+        self.s_B_sch = self.get_scheduler(self.s_B_trainer, last_ep)
+        self.s_A_sch = self.get_scheduler(self.s_A_trainer, last_ep)
+
+
+    def lambda_rule(self, ep):
+        lr_l = self.learning_rate_seg
+        if ep > 0 and ep%2==0:
+            lr_l = np.multiply(self.learning_rate_seg, 0.9)
+        return lr_l
     
+
+    def get_scheduler(self, optimizer, cur_ep=-1):
+        def lambda_rule(ep):
+            lr_l = self.learning_rate_seg
+            if ep > 0 and ep%2==0:
+                lr_l = np.multiply(self.learning_rate_seg, 0.9)
+            return lr_l
+        scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule, last_epoch=cur_ep)
+        return scheduler
+
+    def update_lr(self, ep):
+        self.s_B_sch.step()
+        self.s_A_sch.step()
+        self.learning_rate_seg = self.lambda_rule(self, ep)
+
 
     def fake_image_pool_A(self, fake):
         if self.num_fake_inputs < self._pool_size:
@@ -125,20 +147,43 @@ class DDFSeg(nn.Module):
 
     def setgpu(self, gpu):
         self.gpu = gpu
-        self.encoder_C_AB.cuda(self.gpu)
-        self.encoder_C_A.cuda(self.gpu)
-        self.encoder_C_B.cuda(self.gpu)
-        self.encoder_D_A.cuda(self.gpu)
-        self.encoder_D_B.cuda(self.gpu)
-        self.decoder_AB.cuda(self.gpu)
-        self.decoder_A.cuda(self.gpu)
-        self.decoder_B.cuda(self.gpu)
-        self.segmenter.cuda(self.gpu)
-        self.discriminator_A.cuda(self.gpu)
-        self.discriminator_B.cuda(self.gpu)
-
-
+        self.encoder_C_AB.cuda()
+        self.encoder_C_A.cuda()
+        self.encoder_C_B.cuda()
+        self.encoder_D_A.cuda()
+        self.encoder_D_B.cuda()
+        self.decoder_AB.cuda()
+        self.decoder_A.cuda()
+        self.decoder_B.cuda()
+        self.segmenter.cuda()
+        self.discriminator_A.cuda()
+        self.discriminator_B.cuda()
         # etc
+
+    def reset_losses(self):
+        self.g_loss_A_item = 0
+        self.d_B_loss_item = 0
+        self.s_B_loss_item = 0
+        self.s_A_loss_item = 0
+        self.g_loss_B_item = 0
+        self.d_A_loss_item = 0
+        self.d_F_loss_item = 0
+        self.dif_loss_item = 0
+        
+    def forward_eval(self, images):
+        latent_tmp = self.encoder_C_AB(images)
+        latent = self.encoder_C_B(latent_tmp)
+
+        pred_mask = self.segmenter(latent) # one-hot encoded
+
+        # softmax and argmax for channels > 1 --> to create one channel with different classes
+        softmax_output = F.softmax(pred_mask, dim=1)
+        softmax_output = softmax_output.clamp(-1e15, 1e15) 
+        
+        compact_pred_b = torch.argmax(softmax_output, dim=1)
+
+        return compact_pred_b
+
 
     # Forward pass through the network --> only encoders and decoders 
     def forward(self, images_a, images_b):
@@ -231,10 +276,10 @@ class DDFSeg(nn.Module):
         # forward pass through the generator network
         # CHECK where retain_graph = True is nec?
         #   I think in loss_gA.backward(), loss_sB.backward() and loss_sA.backward() might be an issue?
-        res = self.forward_generator(images_a, images_b)
+        res = self.forward(images_a, images_b)
 
-        loss_gA = self.g_loss_A_item(res["prob_fake_a_is_real"], images_a, images_b, res["cycle_images_a"], res["cycle_images_b"])
-        loss_gB = self.g_loss_B_item(res["prob_fake_b_is_real"], images_a, images_b, res["cycle_images_a"], res["cycle_images_b"])
+        loss_gA = self.g_loss_A(res["prob_fake_a_is_real"], images_a, images_b, res["cycle_images_a"], res["cycle_images_b"])
+        loss_gB = self.g_loss_B(res["prob_fake_b_is_real"], images_a, images_b, res["cycle_images_a"], res["cycle_images_b"])
         loss_dB = self.d_B_loss(res["prob_real_b_is_real"], res["prob_fake_pool_b_is_real"])
     
         loss_sB = self.seg_loss_B(res["pred_mask_fake_b"], labels_a, self.segmenter.parameters(), res["prob_fake_b_is_real"], images_a, images_b, 
@@ -250,51 +295,52 @@ class DDFSeg(nn.Module):
         # update GA 
         self.g_A_trainer.zero_grad()
         loss_gA.backward(retain_graph=True)
-        self.g_loss_A_item = loss_gA.item()
+        self.g_loss_A_item += loss_gA.item()
         self.g_A_trainer.step()
 
         # update DB
         self.d_B_trainer.zero_grad()
         loss_dB.backward()
-        self.d_B_loss_item = loss_dB.item()
+        self.d_B_loss_item += loss_dB.item()
         self.d_B_trainer.step()
         
         # update SB
         self.s_B_trainer.zero_grad()
         loss_sB.backward(retain_graph=True)
-        self.s_B_loss_item = loss_sB.item()
+        self.s_B_loss_item += loss_sB.item()
         self.s_B_trainer.step()
 
         # update SA
         self.s_A_trainer.zero_grad()
         loss_sA.backward(retain_graph=True)
-        self.s_A_loss_item = loss_sA.item()
+        self.s_A_loss_item += loss_sA.item()
         self.s_A_trainer.step()
 
         # update GB
         self.g_B_trainer.zero_grad()
         loss_gB.backward()
-        self.g_loss_B_item = loss_gB.item()
+        self.g_loss_B_item += loss_gB.item()
         self.g_B_trainer.step()
 
         # update DA
         self.d_A_trainer.zero_grad()
         loss_dA.backward()
-        self.d_A_loss_item = loss_dA.item()
+        self.d_A_loss_item += loss_dA.item()
         self.d_A_trainer.step()
 
         # update DF
         self.d_F_trainer.zero_grad()
         loss_dF.backward()
-        self.d_F_loss_item = loss_dF.item()
+        self.d_F_loss_item += loss_dF.item()
         self.d_F_trainer.step()
 
         # update diff
         self.dif_trainer.zero_grad()
         loss_diff.backward()
-        self.dif_loss_item = loss_diff.item()
+        self.dif_loss_item += loss_diff.item()
         self.dif_trainer.step()
 
+    # TO DO
     def resume(self, model_dir):
         checkpoint = torch.load(model_dir)
         # etc
