@@ -21,26 +21,26 @@ class Discriminator(nn.Module):
         self.conv3 = GeneralConv2d(128, 256, kernel_size=4, stride=2, stddev=0.02, padding=0, relu_factor=0.2, norm_type='Ins')
         self.conv4 = GeneralConv2d(256, 512, kernel_size=4, stride=1, stddev=0.02, padding=0, relu_factor=0.2, norm_type='Ins')
         if self.aux:
-            self.conv5 = GeneralConv2d(512, 1, kernel_size=4, stride=1, stddev=0.02, padding=0, do_norm=False, do_relu=False)
+            self.conv5 = GeneralConv2d(512, 2, kernel_size=4, stride=1, stddev=0.02, padding=0, do_norm=False, do_relu=False)
         else:
             self.conv5 = GeneralConv2d(512, 1, kernel_size=4, stride=1, stddev=0.02, padding=0, do_norm=False, do_relu=False)
             
     # input == [B, C, H, W] == [B, 1, 256, 256]
     def forward(self, x):
-        out = F.pad(x, (2, 2, 2, 2), mode="constant")
-        out = self.conv1(out)
-        out = F.pad(out, (2, 2, 2, 2), mode="constant")
-        out = self.conv2(out)
-        out = F.pad(out, (2, 2, 2, 2), mode="constant")
-        out = self.conv3(out)
-        out = F.pad(out, (2, 2, 2, 2), mode="constant")
-        out = self.conv4(out)
-        out = F.pad(out, (2, 2, 2, 2), mode="constant")
-        out = self.conv5(out)
+        out1 = F.pad(x, (2, 2, 2, 2), mode="constant")
+        out2 = self.conv1(out1)
+        out3 = F.pad(out2, (2, 2, 2, 2), mode="constant")
+        out4 = self.conv2(out3)
+        out5 = F.pad(out4, (2, 2, 2, 2), mode="constant")
+        out6 = self.conv3(out5)
+        out7 = F.pad(out6, (2, 2, 2, 2), mode="constant")
+        out8 = self.conv4(out7)
+        out9 = F.pad(out8, (2, 2, 2, 2), mode="constant")
+        out10 = self.conv5(out9)
         if self.aux:
-            return out[:, 0, :, :].unsqueeze(1), out[:, 1, :, :].unsqueeze(1)
+            return out10[:, 0, :, :], out10[:, 1, :, :]
         else:
-            return out
+            return out10
 
 
 ####################################################################
@@ -145,9 +145,9 @@ class Decoder(nn.Module):
             ResNetBlock(128, padding="constant", norm_type="ins"),
             ResNetBlock(128, padding="constant", norm_type="ins"),
             ResNetBlock(128, padding="constant", norm_type="ins"),
-            GeneralDeconv2d(128, 64, kernel_size=3, stride=2, stddev=0.02, padding=1, norm_type="ins"),
-            GeneralDeconv2d(64, 64, kernel_size=3, stride=2, stddev=0.02, padding=1, norm_type="ins"),
-            GeneralDeconv2d(64, 32, kernel_size=3, stride=2, stddev=0.02, padding=1, norm_type="ins"),
+            GeneralDeconv2d(128, 64, kernel_size=3, stride=2, stddev=0.02, padding=1, output_padding=1, norm_type="ins"),
+            GeneralDeconv2d(64, 64, kernel_size=3, stride=2, stddev=0.02, padding=1, output_padding=1, norm_type="ins"),
+            GeneralDeconv2d(64, 32, kernel_size=3, stride=2, stddev=0.02, padding=1, output_padding=1,  norm_type="ins"),
             GeneralConv2d(32, 1, kernel_size=7, stride=1, stddev=0.02, padding=3, do_norm=False, do_relu=False)
         )
     
@@ -156,7 +156,10 @@ class Decoder(nn.Module):
     # output == [B, C, H, W] == [B, 1, 256, 256]
         
     def forward(self, x_de, x_img):
+        # print("x_de shape: ", x_de.shape)
+        # print("x_img shape: ", x_img.shape)
         out = self.layers(x_de)
+        # print("out shape: ", out.shape)
         if self.skip:
             out_t = F.tanh(out + x_img)
         else:
@@ -173,14 +176,14 @@ class SegmentationNetwork(nn.Module):
     def __init__(self, num_classes, keep_rate=0.75):
         super(SegmentationNetwork, self).__init__()
         self.layers = nn.Sequential(
-            GeneralConv2d(128, 128, kernel_size=3, stride=1, stddev=0.02, padding=1, norm_type="ins", keep_rate=keep_rate),
+            GeneralConv2d(512, 128, kernel_size=3, stride=1, stddev=0.02, padding=1, norm_type="ins", keep_rate=keep_rate),
             ResNetBlock(128, padding="constant", norm_type="ins"),
             ResNetBlock(128, padding="constant", norm_type="ins"),
             ResNetBlock(128, padding="constant", norm_type="ins"),
             ResNetBlock(128, padding="constant", norm_type="ins"),
-            GeneralDeconv2d(128, 64, kernel_size=3, stride=2, stddev=0.02, padding=1, norm_type="ins"),
-            GeneralDeconv2d(64, 64, kernel_size=3, stride=2, stddev=0.02, padding=1, norm_type="ins"),
-            GeneralDeconv2d(64, 32, kernel_size=3, stride=2, stddev=0.02, padding=1, norm_type="ins"),
+            GeneralDeconv2d(128, 64, kernel_size=3, stride=2, stddev=0.02, padding=1, output_padding=1, norm_type="ins"),
+            GeneralDeconv2d(64, 64, kernel_size=3, stride=2, stddev=0.02, padding=1, output_padding=1, norm_type="ins"),
+            GeneralDeconv2d(64, 32, kernel_size=3, stride=2, stddev=0.02, padding=1, output_padding=1, norm_type="ins"),
             GeneralConv2d(32, num_classes, kernel_size=7, stride=1, stddev=0.02, padding=3, do_norm=False, do_relu=False)
         )
     

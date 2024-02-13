@@ -91,7 +91,15 @@ class DDFSeg(nn.Module):
 
 
     def set_scheduler(self, last_ep=0):
+        # Assuming optimizer is already created and configured
+        for param_group in self.s_B_trainer.param_groups:
+            param_group['initial_lr'] = param_group['lr']
+
         self.s_B_sch = self.get_scheduler(self.s_B_trainer, last_ep)
+
+        # Assuming optimizer is already created and configured
+        for param_group in self.s_A_trainer.param_groups:
+            param_group['initial_lr'] = param_group['lr']
         self.s_A_sch = self.get_scheduler(self.s_A_trainer, last_ep)
 
 
@@ -119,45 +127,48 @@ class DDFSeg(nn.Module):
 
     def fake_image_pool_A(self, fake):
         if self.num_fake_inputs < self._pool_size:
-            self.fake_images_A[self.num_fake_inputs] = fake
+            self.fake_images_A[self.num_fake_inputs] = fake.cpu().detach()
             return fake
         else:
             p = random.random()
             if p > 0.5:
                 random_id = random.randint(0, self._pool_size - 1)
                 temp = self.fake_images_A[random_id]
-                self.fake_images_A[random_id] = fake
-                return temp
+                self.fake_images_A[random_id] = fake.cpu().detach()
+                return temp.to(self.device)
             else:
                 return fake
             
     def fake_image_pool_B(self, fake):
         if self.num_fake_inputs < self._pool_size:
-            self.fake_images_B[self.num_fake_inputs] = fake
+            self.fake_images_B[self.num_fake_inputs] = fake.cpu().detach()
             return fake
         else:
             p = random.random()
             if p > 0.5:
                 random_id = random.randint(0, self._pool_size - 1)
                 temp = self.fake_images_B[random_id]
-                self.fake_images_B[random_id] = fake
-                return temp
+                self.fake_images_B[random_id] = fake.cpu().detach()
+                return temp.to(self.device)
             else:
                 return fake
 
-    def setgpu(self, gpu):
-        self.gpu = gpu
-        self.encoder_C_AB.cuda()
-        self.encoder_C_A.cuda()
-        self.encoder_C_B.cuda()
-        self.encoder_D_A.cuda()
-        self.encoder_D_B.cuda()
-        self.decoder_AB.cuda()
-        self.decoder_A.cuda()
-        self.decoder_B.cuda()
-        self.segmenter.cuda()
-        self.discriminator_A.cuda()
-        self.discriminator_B.cuda()
+    def setgpu(self, device):
+        print("putting model to device: ", device)
+        self.device = device
+        self.encoder_C_AB.to(device)
+        self.encoder_C_A.to(device)
+        self.encoder_C_B.to(device)
+        self.encoder_D_A.to(device)
+        self.encoder_D_B.to(device)
+        self.decoder_AB.to(device)
+        self.decoder_A.to(device)
+        self.decoder_B.to(device)
+        self.segmenter.to(device)
+        self.discriminator_A.to(device)
+        self.discriminator_B.to(device)
+        self.discriminator_F.to(device)
+
         # etc
 
     def reset_losses(self):
@@ -187,6 +198,7 @@ class DDFSeg(nn.Module):
 
     # Forward pass through the network --> only encoders and decoders 
     def forward(self, images_a, images_b):
+        print("In forward pass")
         latent_tmpa = self.encoder_C_AB(images_a)
         latent_tmpb = self.encoder_C_AB(images_b)
         latent_a = self.encoder_C_A(latent_tmpa)
@@ -205,6 +217,7 @@ class DDFSeg(nn.Module):
         fake_images_a = self.decoder_A(fake_images_tmp_a, images_b)
 
         # Cross cycle
+        print("cross cycle forward pass")
 
         latent_fake_atmp = self.encoder_C_AB(fake_images_a)
         latent_fake_btmp = self.encoder_C_AB(fake_images_b)
@@ -227,9 +240,10 @@ class DDFSeg(nn.Module):
 
 
         # Discriminators
+        print("Discriminators forward pass")
 
-        prob_real_a_is_real, prob_real_a_aux = self.discriminator_A(images_a)
-        prob_real_b_is_real = self.discriminator_B(images_b)
+        prob_real_a_is_real, prob_real_a_aux = self.discriminator_A(images_a.detach())
+        prob_real_b_is_real = self.discriminator_B(images_b.detach())
 
         prob_cycle_a_is_real, prob_cycle_a_aux_is_real = self.discriminator_A(cycle_images_a.detach())
 
@@ -245,8 +259,8 @@ class DDFSeg(nn.Module):
         fake_pool_b = self.fake_image_pool_B(fake_images_b.detach())
         self.num_fake_inputs += 1
 
-        prob_fake_pool_a_is_real, prob_fake_pool_a_aux_is_real = self.discriminator_A(fake_pool_a)
-        prob_fake_pool_b_is_real = self.discriminator_B(fake_pool_b)
+        prob_fake_pool_a_is_real, prob_fake_pool_a_aux_is_real = self.discriminator_A(fake_pool_a.detach())
+        prob_fake_pool_b_is_real = self.discriminator_B(fake_pool_b.detach())
 
         return {"fake_images_a": fake_images_a,
                 "fake_images_b": fake_images_b,
@@ -278,63 +292,73 @@ class DDFSeg(nn.Module):
         #   I think in loss_gA.backward(), loss_sB.backward() and loss_sA.backward() might be an issue?
         res = self.forward(images_a, images_b)
 
-        loss_gA = self.g_loss_A(res["prob_fake_a_is_real"], images_a, images_b, res["cycle_images_a"], res["cycle_images_b"])
-        loss_gB = self.g_loss_B(res["prob_fake_b_is_real"], images_a, images_b, res["cycle_images_a"], res["cycle_images_b"])
+        input_for_seg_B_cycle_images_a = res["cycle_images_a"].clone()
+        input_for_seg_B_cycle_images_b = res["cycle_images_b"].clone()
+        loss_gA = self.g_loss_A(res["prob_fake_a_is_real"], images_a.detach(), images_b.detach(), res["cycle_images_a"], res["cycle_images_b"])
+        loss_gB = self.g_loss_B(res["prob_fake_b_is_real"], images_a.detach(), images_b.detach(), res["cycle_images_a"], res["cycle_images_b"])
         loss_dB = self.d_B_loss(res["prob_real_b_is_real"], res["prob_fake_pool_b_is_real"])
     
-        loss_sB = self.seg_loss_B(res["pred_mask_fake_b"], labels_a, self.segmenter.parameters(), res["prob_fake_b_is_real"], images_a, images_b, 
+        loss_sB = self.seg_loss_B(res["pred_mask_fake_b"], labels_a.detach(), self.segmenter, res["prob_fake_b_is_real"], images_a.detach(), images_b.detach(), 
                                   res["cycle_images_a"], res["cycle_images_b"], loss_f_weight_value, res["prob_fea_b_is_real"], res["prob_fake_a_aux_is_real"])
 
-        loss_sA = self.seg_loss_A(res["pred_mask_real_a"], labels_a, self.segmenter.parameters(), res["prob_fake_a_is_real"], images_a, images_b,
+        loss_sA = self.seg_loss_A(res["pred_mask_real_a"], labels_a.detach(), self.segmenter, res["prob_fake_a_is_real"], images_a.detach(), images_b.detach(),
                                   res["cycle_images_a"], res["cycle_images_b"])
         
-        loss_dA = self.d_A_loss(res["prob_real_a_is_real"], res["prob_fake_pool_a_is_real"], res["prob_fake_a_is_real"], res["prob_cycle_a_aux_is_real"], res["prob_fake_pool_a_aux_is_real"])
+        loss_dA = self.d_A_loss(res["prob_real_a_is_real"], res["prob_fake_pool_a_is_real"], res["prob_cycle_a_aux_is_real"], res["prob_fake_pool_a_aux_is_real"])
         loss_dF = self.d_F_loss(res["prob_fea_fake_b_is_real"], res["prob_fea_b_is_real"])
         loss_diff = self.dif_loss(res["fea_A_separate_B"], res["fea_B_separate_A"], res["fea_FA_separate_B"], res["fea_FB_separate_A"])
 
         # update GA 
+        print("Update GA")
         self.g_A_trainer.zero_grad()
         loss_gA.backward(retain_graph=True)
         self.g_loss_A_item += loss_gA.item()
         self.g_A_trainer.step()
 
         # update DB
+        print("Update DB")
         self.d_B_trainer.zero_grad()
-        loss_dB.backward()
+        loss_dB.backward(retain_graph=True)
         self.d_B_loss_item += loss_dB.item()
         self.d_B_trainer.step()
         
         # update SB
-        self.s_B_trainer.zero_grad()
-        loss_sB.backward(retain_graph=True)
-        self.s_B_loss_item += loss_sB.item()
-        self.s_B_trainer.step()
+        # print("Update SB")
+        # self.s_B_trainer.zero_grad()
+        # loss_sB.backward(retain_graph=True)
+        # self.s_B_loss_item += loss_sB.item()
+        # self.s_B_trainer.step()
 
-        # update SA
-        self.s_A_trainer.zero_grad()
-        loss_sA.backward(retain_graph=True)
-        self.s_A_loss_item += loss_sA.item()
-        self.s_A_trainer.step()
+        # # update SA
+        # print("Update SA")
+        # self.s_A_trainer.zero_grad()
+        # loss_sA.backward(retain_graph=True)
+        # self.s_A_loss_item += loss_sA.item()
+        # self.s_A_trainer.step()
 
         # update GB
+        print("Update GB")
         self.g_B_trainer.zero_grad()
         loss_gB.backward()
         self.g_loss_B_item += loss_gB.item()
         self.g_B_trainer.step()
 
         # update DA
+        print("Update DA")
         self.d_A_trainer.zero_grad()
         loss_dA.backward()
         self.d_A_loss_item += loss_dA.item()
         self.d_A_trainer.step()
 
         # update DF
+        print("Update DF")
         self.d_F_trainer.zero_grad()
         loss_dF.backward()
         self.d_F_loss_item += loss_dF.item()
         self.d_F_trainer.step()
 
         # update diff
+        print("Update diff")
         self.dif_trainer.zero_grad()
         loss_diff.backward()
         self.dif_loss_item += loss_diff.item()

@@ -100,13 +100,16 @@ class SegmentationLoss(nn.Module):
         self.dice_loss = DiceLoss(softmax=True)
         self.gen_loss = GeneratorLoss(lr_a=lr_a, lr_b=lr_b)
     
-    def forward(self, logits, gt, model_params, prob_fake_x_is_real, input_a, input_b, cycle_input_a, cycle_input_b):
+    def forward(self, logits, gt, model, prob_fake_x_is_real, input_a, input_b, cycle_input_a, cycle_input_b):
         # model_params are the trainable parameters of self.segmenter and  e_B ??????
-        dice_loss = self.dice_loss(logits, gt)
-        ce_loss = self.wce_loss(logits, gt)
+        gt_oh = F.one_hot(gt.long().squeeze(1), num_classes=logits.shape[1]).permute(0, 3, 2, 1)
+        dice_loss = self.dice_loss(logits, gt_oh)
+        ce_loss = self.wce_loss(logits, gt_oh)
         
-        stacked_params = torch.stack([param.view(-1) for param in model_params])
-        l2_loss = 0.0001*torch.sum(stacked_params ** 2)
+        l2_loss = 0
+        for name, param in model.named_parameters():
+            l2_loss += 0.0001 * torch.sum(param ** 2)  # Directly calculate L2 norm
+
 
         gen_loss = self.gen_loss(prob_fake_x_is_real, input_a, input_b, cycle_input_a, cycle_input_b)
 

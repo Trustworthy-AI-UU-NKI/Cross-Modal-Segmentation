@@ -25,15 +25,15 @@ class ResNetBlock(nn.Module):
 
     def forward(self, x):
         # Apply the first convolutional layer with reflect padding
-        out = F.pad(x, (1, 1, 1, 1), mode=self.padding)
-        out = self.conv1(out)
+        out1 = F.pad(x, (1, 1, 1, 1), mode=self.padding)
+        out2 = self.conv1(out1)
 
         # Apply the second convolutional layer with reflect padding
-        out = F.pad(out, (1, 1, 1, 1), mode=self.padding)
-        out = self.conv2(out)
+        out3 = F.pad(out2, (1, 1, 1, 1), mode=self.padding)
+        out4 = self.conv2(out3)
 
         # Residual connection
-        return F.relu(out + x)
+        return F.relu(out4 + x)
     
 class ResNetBlockDS(nn.Module):
     def __init__(self, dim_in, dim_out, norm_type=None, padding = "reflect", keep_rate=0.75):
@@ -47,17 +47,17 @@ class ResNetBlockDS(nn.Module):
         
     def forward(self, x):
         # Apply the first convolutional layer with reflect padding
-        out = F.pad(x, (1, 1, 1, 1), mode=self.padding)
-        out = self.conv1(out)
+        out1 = F.pad(x, (1, 1, 1, 1), mode=self.padding)
+        out2 = self.conv1(out1)
 
         # Apply the second convolutional layer with reflect padding
-        out = F.pad(out, (1, 1, 1, 1), mode=self.padding)
-        out = self.conv2(out)
+        out3 = F.pad(out2, (1, 1, 1, 1), mode=self.padding)
+        out4 = self.conv2(out3)
         
-        padded_x = F.pad(padded_x, (0, 0, 0, 0, self.padding_dim, self.padding_dim), mode=self.padding)
+        padded_x = F.pad(x, (0, 0, 0, 0, self.padding_dim, self.padding_dim), mode=self.padding)
 
         # Residual connection
-        return F.relu(out + padded_x)
+        return F.relu(out4 + padded_x)
 
 class DRNBlock(nn.Module):
     def __init__(self, dim, norm_type=None, padding="reflect", keep_rate=0.75):
@@ -68,12 +68,12 @@ class DRNBlock(nn.Module):
 
 
     def forward(self, x):
-        out = F.pad(x, (2, 2, 2, 2), mode=self.padding)
-        out = self.dconv1(out)
-        out = F.pad(out, (2, 2, 2, 2), mode=self.padding)
-        out = self.dconv2(out)
+        out1 = F.pad(x, (2, 2, 2, 2), mode=self.padding)
+        out2 = self.dconv1(out1)
+        out3 = F.pad(out2, (2, 2, 2, 2), mode=self.padding)
+        out4 = self.dconv2(out3)
 
-        return F.relu(out + x)
+        return F.relu(out4 + x)
     
 
 class DRNBlockDS(nn.Module):
@@ -86,14 +86,14 @@ class DRNBlockDS(nn.Module):
 
 
     def forward(self, x):
-        out = F.pad(x, (2, 2, 2, 2), mode=self.padding)
-        out = self.dconv1(out)
-        out = F.pad(out, (2, 2, 2, 2), mode=self.padding)
-        out = self.dconv2(out)
+        out1 = F.pad(x, (2, 2, 2, 2), mode=self.padding)
+        out2 = self.dconv1(out1)
+        out3 = F.pad(out2, (2, 2, 2, 2), mode=self.padding)
+        out4 = self.dconv2(out3)
 
         padded_x = F.pad(x, (0, 0, 0, 0, self.padding_dim, self.padding_dim), mode=self.padding)
 
-        return F.relu(out + padded_x)
+        return F.relu(out4 + padded_x)
 
 class AttentionBlock(nn.Module):
     def __init__(self, ch, keep_rate=0.75):
@@ -103,7 +103,7 @@ class AttentionBlock(nn.Module):
         self.f_conv = GeneralConv2d(ch, ch//8, kernel_size=1, stride=1, norm_type = "batch", keep_rate=keep_rate)
         self.g_conv = GeneralConv2d(ch, ch//8, kernel_size=1, stride=1,  norm_type = "batch", keep_rate=keep_rate)
         self.h_conv = GeneralConv2d(ch, ch//2, kernel_size=1, stride=1, norm_type = "batch", keep_rate=keep_rate)
-        self.o_conv = GeneralConv2d(ch, ch, kernel_size=1, stride=1, norm_type = "batch", keep_rate=keep_rate)
+        self.o_conv = GeneralConv2d(ch//2, ch, kernel_size=1, stride=1, norm_type = "batch", keep_rate=keep_rate)
 
         self.gamma = nn.Parameter(torch.zeros(1))  # Trainable scalar
 
@@ -119,19 +119,33 @@ class AttentionBlock(nn.Module):
         h = F.max_pool2d(h, kernel_size=2, stride=2)  # Pooling for h
 
         # Flatten and perform matrix multiplication
-        s = torch.matmul(self.hw_flatten(g), self.hw_flatten(f).transpose(-2, -1))
+        # print(g.shape)
+        # print(self.hw_flatten(g).shape)
+        # print(f.shape)
+        # print(self.hw_flatten(f).shape)
+        # print(self.hw_flatten(f).transpose(-2, -1).shape)
+        s = torch.matmul(self.hw_flatten(g).transpose(-2, -1), self.hw_flatten(f))
+        # shape == bs, N, N
+        # print(s.shape)
         beta = F.softmax(s, dim=-1)  # Attention map
+        # print(beta.shape)
 
-        o = torch.matmul(beta, self.hw_flatten(h))  # [bs, N, C]
-        o = o.view(batch_size, height, width, num_channels // 2).permute(0, 3, 1, 2)
+        # print(h.shape)
+        # print(self.hw_flatten(h).shape)
+        o = torch.matmul(beta, self.hw_flatten(h).transpose(-2, -1))  # [bs, N, C]
+        # print("o", o.shape)
+        o2 = o.view(batch_size, num_channels // 2, height, width)
+        # print("o reshaped", o.shape)
 
-        o = self.out_conv(o)
-
-        x = self.gamma * o + x
-        return x
+        o3 = self.o_conv(o2)
+        # print("o after conv", o.shape)
+        # print("x shape", x.shape)   
+        new_x = self.gamma * o3 + x
+        # print("new_x", new_x.shape)
+        return new_x
 
     
-    def hw_flatten(x):
+    def hw_flatten(self, x):
         # Flatten height and width dimensions
         return x.view(x.size(0), x.size(1), -1)
 
@@ -188,17 +202,17 @@ class GeneralConv2d(nn.Module):
         self.relu_factor = relu_factor
 
     def forward(self, x):
-        x = self.conv(x)
+        out1 = self.conv(x)
         if self.dropout:
-            x = self.dropout(x)
+            out1 = self.dropout(out1)
         if self.norm:
-            x = self.norm(x)
+            out1 = self.norm(out1)
         if self.do_relu:
             if self.relu_factor == 0:
-                x = F.relu(x)
+                out1 = F.relu(out1)
             else:
-                x = F.leaky_relu(x, negative_slope=self.relu_factor)
-        return x
+                out1 = F.leaky_relu(out1, negative_slope=self.relu_factor)
+        return out1
     
 class DilateConv2d(nn.Module):
     def __init__(self, input_channels, output_channels, kernel_size=7, dilation_rate=2, padding=0,
@@ -237,27 +251,27 @@ class DilateConv2d(nn.Module):
         self.relu_factor = relu_factor
 
     def forward(self, x):
-        x = self.conv(x)
+        out1 = self.conv(x)
         if self.dropout:
-            x = self.dropout(x)
+            out1 = self.dropout(out1)
         if self.norm:
-            x = self.norm(x)
+            out1 = self.norm(out1)
         if self.do_relu:
             if self.relu_factor == 0:
-                x = F.relu(x)
+                out1 = F.relu(out1)
             else:
-                x = F.leaky_relu(x, negative_slope=self.relu_factor)
-        return x
+                out1 = F.leaky_relu(out1, negative_slope=self.relu_factor)
+        return out1
 
 #Padding = "valid --> 0"
 #Padding = "same --> depends on input"
 class GeneralDeconv2d(nn.Module):
     def __init__(self, input_channels, output_channels, kernel_size=7, stride=1, padding=0,
-                 stddev=0.02, do_norm=True, do_relu=True, relu_factor=0, norm_type=None):
+                 stddev=0.02, output_padding = 0, do_norm=True, do_relu=True, relu_factor=0, norm_type=None):
         super(GeneralDeconv2d, self).__init__()
 
         # Transposed Convolution
-        self.conv = nn.ConvTranspose2d(input_channels, output_channels, kernel_size, stride=stride, padding=padding)
+        self.conv = nn.ConvTranspose2d(input_channels, output_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding)
 
         # Weight and bias initialization
         nn.init.trunc_normal_(self.conv.weight, std=stddev)
@@ -281,12 +295,14 @@ class GeneralDeconv2d(nn.Module):
         self.relu_factor = relu_factor
 
     def forward(self, x):
-        x = self.conv(x)
+        # print("x shape", x.shape)
+        out1 = self.conv(x)
+        # print("x shape after conv ", x.shape)
         if self.norm:
-            x = self.norm(x)
+            out1 = self.norm(out1)
         if self.do_relu:
             if self.relu_factor == 0:
-                x = F.relu(x)
+                out1 = F.relu(out1)
             else:
-                x = F.leaky_relu(x, negative_slope=self.relu_factor)
-        return x
+                out1 = F.leaky_relu(out1, negative_slope=self.relu_factor)
+        return out1

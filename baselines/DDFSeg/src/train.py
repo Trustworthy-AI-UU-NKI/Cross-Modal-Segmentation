@@ -16,6 +16,7 @@ from monai.metrics import DiceMetric
 def validation(model, data_loader, saver, device, ep):
     dice_scores = []
     model.eval()
+    print("Validation")
     for it, (images_a, labels_a, images_b, labels_b) in enumerate(data_loader):
         with torch.no_grad():
         # compute self.dice_b_mean --> with keep_rate = 1
@@ -34,6 +35,8 @@ def validation(model, data_loader, saver, device, ep):
 
     dice_scores = np.array(dice_scores)
     new_val = np.mean(dice_scores)
+    print("dice scores:", dice_scores)
+    print("new_val:", new_val)
 
     saver.write_val_dsc(ep, new_val)
 
@@ -46,9 +49,8 @@ def train(train_loader, val_loader, fold, device, args, num_classes, len_train_d
     # model
     print('\n--- load model ---')
     model = DDFSeg(args, num_classes)
-    
-    if device == "cuda":
-        model.setgpu(device)
+    model.setgpu(device)
+    torch.autograd.set_detect_anomaly(True)
 
     # how with different folds? 
     # if args.resume:
