@@ -6,3 +6,6 @@ data/__pycache__
 PnpAda_release_data/
 baselines/checkpoints/
 baselines/UNET_logs/
+DDFSeg/logs/
+DDFSeg/results/
+DDFSef/src/__pycache__

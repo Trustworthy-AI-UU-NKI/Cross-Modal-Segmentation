@@ -15,6 +15,7 @@ from monai.transforms import (
     SqueezeDimd,
     MapLabelValued,
     ScaleIntensityd,
+    NormalizeIntensityd
 )
 
 from monai.data import Dataset, list_data_collate
@@ -50,8 +51,9 @@ class MMWHS_single(pl.LightningDataModule):
         transforms = Compose(
             [
                 LoadImaged(keys=["img", "seg"]),
-                ScaleIntensityd(keys=["img"]),
+                NormalizeIntensityd(keys=["img"], subtrahend=0.5, divisor=0.5),
                 MapLabelValued(keys=["seg"], orig_labels=[1, 2, 3, 4, 5 , 6 , 7], target_labels=self.target_labels),
+                MapLabelValued(keys=["seg"], orig_labels=[421], target_labels=[0]),
             ]
         )
 
@@ -86,6 +88,7 @@ class MMWHS_single(pl.LightningDataModule):
 
             self.fold_datasets.append((train_ds, val_ds))
 
+        print("test_data_dir", self.test_data_dir)
         # Test dataset remains the same
         test_images = sorted(glob.glob(os.path.join(self.test_data_dir, "images/case_1019/*.nii.gz")))
         test_images2 = sorted(glob.glob(os.path.join(self.test_data_dir, "images/case_1020/*.nii.gz")))
@@ -95,7 +98,7 @@ class MMWHS_single(pl.LightningDataModule):
         test_labels2 = sorted(glob.glob(os.path.join(self.test_data_dir, "labels/case_1020/*.nii.gz")))
         test_labels = test_labels + test_labels2
 
-        # # print(test_labels)
+        # # # print(test_labels)
         test_files = [{"img": img, "seg": seg} for img, seg in zip(test_images, test_labels)]
         
 

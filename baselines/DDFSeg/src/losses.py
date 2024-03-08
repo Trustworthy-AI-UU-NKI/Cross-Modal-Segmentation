@@ -41,15 +41,18 @@ class DiscriminatorLoss(nn.Module):
 class ZeroLoss(nn.Module):
     def __init__(self, lr = 0.01):
         super(ZeroLoss, self).__init__()
-        self.l1_loss = torch.nn.L1Loss()
+        self.l1_loss1 = torch.nn.L1Loss()
+        self.l1_loss2 = torch.nn.L1Loss()
+        self.l1_loss3 = torch.nn.L1Loss()
+        self.l1_loss4 = torch.nn.L1Loss()
         self.lr = lr # lr5
 
     def forward(self, fea_A_separate_B, fea_B_separate_A, fea_FA_separate_B, fea_FB_separate_A):
-        lossea = self.lr * self.l1_loss(fea_A_separate_B, torch.zeros_like(fea_A_separate_B))
-        lossesb = self.lr * self.l1_loss(fea_B_separate_A, torch.zeros_like(fea_B_separate_A))
-        lossesaf = self.lr * self.l1_loss(fea_FA_separate_B, torch.zeros_like(fea_FA_separate_B))
-        lossesbf = self.lr * self.l1_loss(fea_FB_separate_A, torch.zeros_like(fea_FB_separate_A))
-        return lossea + lossesb + lossesaf + lossesbf
+        lossesa = self.lr * self.l1_loss1(fea_A_separate_B, torch.zeros_like(fea_A_separate_B))
+        lossesb = self.lr * self.l1_loss2(fea_B_separate_A, torch.zeros_like(fea_B_separate_A))
+        lossesaf = self.lr * self.l1_loss3(fea_FA_separate_B, torch.zeros_like(fea_FA_separate_B))
+        lossesbf = self.lr * self.l1_loss4(fea_FB_separate_A, torch.zeros_like(fea_FB_separate_A))
+        return lossesa + lossesb + lossesaf + lossesbf
     
 
 class CycleConsistencyLoss(nn.Module):
@@ -80,6 +83,7 @@ class SoftmaxWeightedLoss(nn.Module):
         super(SoftmaxWeightedLoss, self).__init__()
 
     def forward(self, logits, gt):
+
         num_classes = logits.shape[1]  # Assuming logits are of shape [N, C, H, W]
         softmaxpred = F.softmax(logits, dim=1)
 
@@ -88,7 +92,8 @@ class SoftmaxWeightedLoss(nn.Module):
             gti = gt[:, i, ...]
             predi = softmaxpred[:, i, ...]
             weighted = 1 - torch.sum(gti) / torch.sum(gt)
-            raw_loss += -weighted * gti * torch.log(torch.clamp(predi, min=0.005, max=1))
+            raw_loss = raw_loss - (weighted * gti * torch.log(torch.clamp(predi, min=0.005, max=1)))
+    
 
         loss = torch.mean(raw_loss)
         return loss
@@ -101,14 +106,17 @@ class SegmentationLoss(nn.Module):
         self.gen_loss = GeneratorLoss(lr_a=lr_a, lr_b=lr_b)
     
     def forward(self, logits, gt, model, prob_fake_x_is_real, input_a, input_b, cycle_input_a, cycle_input_b):
-        # model_params are the trainable parameters of self.segmenter and  e_B ??????
+        # print("in forwars segmentation loss")
+        # unique = torch.unique(gt.long()) 
+        # print("unique in gt", unique)
+
         gt_oh = F.one_hot(gt.long().squeeze(1), num_classes=logits.shape[1]).permute(0, 3, 2, 1)
         dice_loss = self.dice_loss(logits, gt_oh)
         ce_loss = self.wce_loss(logits, gt_oh)
         
         l2_loss = 0
         for name, param in model.named_parameters():
-            l2_loss += 0.0001 * torch.sum(param ** 2)  # Directly calculate L2 norm
+            l2_loss = l2_loss + (0.0001 * torch.sum(param.detach() ** 2))  # Directly calculate L2 norm
 
 
         gen_loss = self.gen_loss(prob_fake_x_is_real, input_a, input_b, cycle_input_a, cycle_input_b)

@@ -93,10 +93,11 @@ class UNetL(pl.LightningModule):
         return torch.optim.Adam(self.parameters(), lr=self.lr)
 
     def log_images(self, inputs, labels, outputs, tag, step):
-        for i, (input_img, label_img, output_img) in enumerate(zip(inputs, labels, outputs)):
-            self.logger.experiment.add_image(f"{tag}_input_{i}", input_img, step)
-            self.logger.experiment.add_image(f"{tag}_label_{i}", label_img, step)
-            self.logger.experiment.add_image(f"{tag}_output_{i}", output_img, step)
+        return
+        # for i, (input_img, label_img, output_img) in enumerate(zip(inputs, labels, outputs)):
+        #     self.logger.experiment.add_image(f"{tag}_input_{i}", input_img, step)
+        #     self.logger.experiment.add_image(f"{tag}_label_{i}", label_img, step)
+        #     self.logger.experiment.add_image(f"{tag}_output_{i}", output_img, step)
             
     
     def test_step(self, batch, batch_idx):

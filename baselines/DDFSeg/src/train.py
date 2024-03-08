@@ -11,7 +11,7 @@ from utils import dice
 
 from sklearn.model_selection import KFold
 from monai.metrics import DiceMetric
-
+import os
 
 def validation(model, data_loader, saver, device, ep):
     dice_scores = []
@@ -22,21 +22,18 @@ def validation(model, data_loader, saver, device, ep):
         # compute self.dice_b_mean --> with keep_rate = 1
             images_b = images_b.to(device)
             labels_b = labels_b.to(device) # one channel with different numbers
-            pred_mask_b = model.forward_eval(images_b) # one channel with different numbers
+            pred_mask_b = model.forward_eval(images_b) # multiple channel with softmax
             dice_b_mean = dice(labels_b.cpu(), pred_mask_b.cpu(), model.num_classes)
-            if it == 0:
-                saver.write_images(images_b[0, 0, :, :].cpu(), labels_b[0, 0, :, :].cpu(), pred_mask_b[0, 0, :, :].cpu(), ep)
-
+            # if it == 0:
+            #     saver.write_images(images_b[0, 0, :, :].cpu(), labels_b[0, 0, :, :].cpu(), pred_mask_b[0, 0, :, :].cpu(), ep)
+        
            
         dice_scores.append(dice_b_mean)
-
-    print("len:", len(dice_scores))
-    print("its:", it)
+    
 
     dice_scores = np.array(dice_scores)
     new_val = np.mean(dice_scores)
-    print("dice scores:", dice_scores)
-    print("new_val:", new_val)
+    print("new validation dice score:", new_val)
 
     saver.write_val_dsc(ep, new_val)
 
@@ -50,7 +47,6 @@ def train(train_loader, val_loader, fold, device, args, num_classes, len_train_d
     print('\n--- load model ---')
     model = DDFSeg(args, num_classes)
     model.setgpu(device)
-    torch.autograd.set_detect_anomaly(True)
 
     # how with different folds? 
     # if args.resume:
@@ -78,7 +74,7 @@ def train(train_loader, val_loader, fold, device, args, num_classes, len_train_d
 
         model.reset_losses()
 
-        for it, (images_a, labels_a, images_b, ) in enumerate(train_loader):
+        for it, (images_a, labels_a, images_b, labels_b) in enumerate(train_loader):
 
             # input data
             images_a = images_a.to(device).detach()
@@ -90,18 +86,14 @@ def train(train_loader, val_loader, fold, device, args, num_classes, len_train_d
 
             total_it += 1
             model.update_num_fake_inputs()
-            # testing
-            break
 
         model.update_lr(ep)
         
-        # update TB --> divided by lenght of train_loader??
         saver.write_display(ep, model)
 
         # Save the best val model
         validation(model, val_loader, saver, device, ep)
-        # testing
-        break
+    
 
 
 def main(args):
@@ -115,13 +107,14 @@ def main(args):
         num_classes = 8
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     source_cases = range(0,20)
     target_cases = range(0,18)
     kf = KFold(n_splits=args.k_folds, shuffle=True)
     fold = 0
+    
  
     for (fold_source_train, fold_source_val), (fold_target_train, fold_target_val)  in zip(kf.split(source_cases), kf.split(target_cases)):
+        
         print("loading train data")
         dataset_train = MMWHS(args, labels, fold_target_train, fold_source_train)
         train_loader = DataLoader(dataset_train, batch_size=args.bs, shuffle=True, num_workers=4)
@@ -132,8 +125,6 @@ def main(args):
 
         train(train_loader, val_loader, fold, device, args, num_classes, len_train_data) 
         fold += 1
-        # for now one fold
-        break
 
 
 if __name__ == '__main__':
@@ -143,11 +134,10 @@ if __name__ == '__main__':
     # data loader related
     parser.add_argument('--data_dir1', type=str, default='../../../data/other/MR_withGT_proc/annotated/', help='path of data to domain 1 - source domain')
     parser.add_argument('--data_dir2', type=str, default='../../../data/other/CT_withGT_proc/annotated/', help='path of data to domain 2 - target domain')
-    parser.add_argument('--phase', type=str, default='train', help='phase for dataloading')
     parser.add_argument('--resume', type=str, default=None, help='specified the dir of saved models for resume the training')
 
     # ouptput related
-    parser.add_argument('--name', type=str, default='trial', help='folder name to save outputs')
+    parser.add_argument('--name', type=str, default='reproduce', help='folder name to save outputs')
     parser.add_argument('--display_dir', type=str, default='../logs', help='path for saving display results')
     parser.add_argument('--result_dir', type=str, default='../results', help='path for saving result images and models')
     parser.add_argument('--img_save_freq', type=int, default=5, help='freq (epoch) of saving models')
@@ -156,7 +146,7 @@ if __name__ == '__main__':
     parser.add_argument('--pred', default='MYO', type=str,help='Prediction of which label') # MYO, LV, RV, MYO_RV, MYO_LV_RV
     parser.add_argument('--modality', default="MRI", type=str, help='modality that is annotated - source domain') # or MRI
     parser.add_argument('--k_folds', default=5, type=int, help='Number of folds for K-Fold Cross-Validation')
-    parser.add_argument('--epochs', default=10, type=int, help='Max number of epochs')
+    parser.add_argument('--epochs', default=100, type=int, help='Max number of epochs')
     parser.add_argument('--seed', default=42, type=int,help='Seed to use for reproducing results')
     parser.add_argument('--lr', default=0.0002, type=float, help='Learning rate')
     parser.add_argument('--lr67', default=0.001, type=float, help='Learning rate for the segmentor')
