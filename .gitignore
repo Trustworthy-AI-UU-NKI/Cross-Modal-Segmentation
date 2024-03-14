@@ -8,5 +8,5 @@ baselines/checkpoints/
 baselines/UNET_logs/
 baselines/DDFSeg/logs/
 baselines/DDFSeg/results/
-baselines/DDFSeg/src/__pycache__/
-baselines/__pycache__/
+baselines/DDFSeg/src/__pycache__
+baselines/__pycache__
