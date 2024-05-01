@@ -3,132 +3,200 @@ import torch
 import argparse
 import sys
 import glob
-
-from unet_pl import UNetL
-
 import pytorch_lightning as pl
-from monai.transforms import (
-    LoadImaged,
-    Compose,
-    EnsureChannelFirstd,
-    SqueezeDimd,
-    MapLabelValued,
-)
 
-from data import MMWHS_single # , MMWHS_double
+from torch.utils.data import DataLoader
+from data import MMWHS_single, Retinal_Vessel_single
+import torch.optim as optim
+import numpy as np
 
+from monai.networks.nets import UNet
 from sklearn.model_selection import KFold 
+from monai.losses import DiceLoss
+import torch.nn.functional as F
 
-from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
-from pytorch_lightning.loggers import TensorBoardLogger
+from torch.utils.tensorboard import SummaryWriter
+from helpers import *
 
-def train(args, dir_checkpoint, model_class, dataset, k_folds, device):
-    test_results = []
-    test_loader = dataset.test_dataloader()
-    for fold in range(k_folds):
-        print(f"Training fold {fold}")
-        logger = TensorBoardLogger(dir_checkpoint, name=f'fold_{fold}')
-        dataset.set_current_fold(fold)
-        trainer = pl.Trainer(default_root_dir=dir_checkpoint, max_epochs=args.epochs, accelerator="gpu" if str(device).startswith("cuda") else "cpu", devices=1, logger=logger,
-                            callbacks=ModelCheckpoint(
-                            save_weights_only=True,
-                            dirpath=dir_checkpoint,
-                            filename = "{epoch}-{Validation Mean Dice:.4f}",
-                            monitor="Validation Mean Dice",
-                            mode="max",
-                            save_top_k=1,
-                        ))
-        model = model_class(args.bs, args.epochs, args.loss, args.lr, args.modality, args.pred)
+def train(args, dir_checkpoint_fold, device, n_classes, train_loader, val_loader, in_channels=1):
+    
+    if args.model == "ResUnet":
+        model = UNet(
+            spatial_dims=2,
+            in_channels=in_channels,
+            out_channels=n_classes,
+            channels=(16, 32, 64, 128, 256),
+            strides=(2, 2, 2, 2),
+            num_res_units=2,
+        )
+    else:
+        model = UNet_model(n_classes)
 
-        train_loader, val_loader = dataset.get_fold_dataloaders(fold)
-        
-        model.train_dataloader = lambda: train_loader
-        model.val_dataloader = lambda: val_loader
-        model.test_dataloader = lambda: test_loader
+    model.to(device)
 
-        trainer.fit(model)
+    best_dice = 0
+    global_step = 0
+    dice_loss = DiceLoss(include_background=False, softmax=True)
 
-        # run test set
-        result = trainer.test(model)
-        test_results.append(result[0]["Test Mean Dice"])
-        # for now only one fold
-        # break
+    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    writer = SummaryWriter(log_dir=dir_checkpoint_fold)
 
-    print("Test results:")
-    print(test_results)
-    final_res = sum(test_results)/len(test_results)
-    print("Final test result:")
-    print(final_res)
+    for epoch in range(args.epochs):
+        model.train()
+        for image, label in train_loader:
+            image = image.to(device)
+            label = label.to(device)
+
+            outputs = model(image)
+            labels_oh = F.one_hot(label.long().squeeze(1), n_classes).permute(0, 3, 1, 2)
+            loss = dice_loss(outputs, labels_oh)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            writer.add_scalar('Loss/train', loss, global_step)
+            global_step += 1
+
+        model.eval()
+        dice_tot = 0
+        dice_classes_tot = np.zeros(n_classes)
+        with torch.no_grad():
+            for image, label in val_loader:
+                image = image.to(device)
+                label = label.to(device)
+
+                outputs = model(image)
+                dice_classes = dice(label, outputs, n_classes)
+                dice_classes_tot += dice_classes
+                dice_tot += np.mean(dice_classes[1:])
+
+            dice_tot /= len(val_loader)
+            dice_classes_tot /= len(val_loader)
+
+            writer.add_scalar('Dice/val', dice_tot, epoch)
+            for item in range(n_classes):
+                writer.add_scalar(f'Dice/val_{item}', dice_classes_tot[item], epoch)
+
+        if dice_tot > best_dice:
+            best_dice = dice_tot
+            existing_model_files = glob.glob(f"{dir_checkpoint_fold}/*.pth")
+            # Delete each found model file
+            for file_path in existing_model_files:
+                try:
+                    os.remove(file_path)
+                    print(f"Deleted old model file: {file_path}")
+                except OSError as e:
+                    print(f"Error deleting file {file_path}: {e}")
+                    
+            torch.save(model.state_dict(), os.path.join(dir_checkpoint_fold, f'best_model_{epoch}.pth'))
+            print(f"Saved best model with dice {dice_tot} at epoch {epoch}")
 
 
-def test(trainer, models, model_class, dataset, k):
-    test_results = []
+def test(model_file, test_loader, n_classes, in_channels, device, model_type):
 
-    for pretrained_model in models:
-        print(f"Testing model {pretrained_model}")
-        model = model_class.load_from_checkpoint(pretrained_model) 
-        test_loader = dataset.test_dataloader() 
-        model.test_dataloader = lambda: test_loader
-        result = trainer.test(model, dataloaders=test_loader)
-        print("hier?")
-        test_results.append(result[0]["Test Mean Dice"])
+    if model_type == "ResUnet":
+        model = UNet(
+            spatial_dims=2,
+            in_channels=in_channels,
+            out_channels=n_classes,
+            channels=(16, 32, 64, 128, 256),
+            strides=(2, 2, 2, 2),
+            num_res_units=2,
+        )
+    else:
+        model = UNet_model(n_classes)
 
-    print("Test results:")
-    print(test_results)
-    final_res = sum(test_results)/len(test_results)
-    print("Final test result:")
-    print(final_res)
+    #init_weights_norm(model)
+    model.to(device)
+    print(f"Testing model {model_file}")
+    # Load the state dictionary
+    model.load_state_dict(torch.load(model_file))
+    model.eval()
+
+    dice_tot = 0
+    dice_classes_tot = np.zeros(n_classes)
+    with torch.no_grad():
+        for image, label in test_loader:
+            image = image.to(device)
+            label = label.to(device)
+
+            outputs = model(image)
+            dice_classes = dice(label, outputs, n_classes)
+            # dice_tot += dice_classes.item()
+            dice_classes_tot += dice_classes
+            dice_tot += np.mean(dice_classes)
+
+        dice_tot /= len(test_loader)
+        dice_classes_tot /= len(test_loader)
+    
+
+    return dice_tot, dice_classes_tot
+
 
 def main(args):
 
     pl.seed_everything(args.seed)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    filename = f'Name_{args.name}_LR_{args.lr}_BS_{args.bs}_modality_{args.modality}_epochs_{args.epochs}_label_{args.pred}_loss_{args.loss}_model_{args.model}_folds_{args.k_folds}'    
-    # filename = f'LR_{args.lr}_BS_{args.bs}_modality_{args.modality}_epochs_{args.epochs}_label_{args.pred}_loss_{args.loss}_model_{args.model}'    
-    
+    filename = f'{args.name}_{args.pred}'    
     dir_checkpoint = os.path.join('checkpoints/', filename)
     os.makedirs(dir_checkpoint, exist_ok=True)
-    logger = TensorBoardLogger('checkpoints/', name=filename)
 
-    if args.pred == "MYO":
-        labels = [1, 0, 0, 0, 0, 0, 0]
+    labels, n_classes = get_labels(args.pred)
+
+    # MMWHS Dataset
+    if args.data_type == "MMWHS":
+        dataset_type = MMWHS_single
+        in_channels = 1
+    elif args.data_type == "RetinalVessel":
+        dataset_type = Retinal_Vessel_single
+        in_channels = 3
     else:
-        labels = [1, 1, 1, 1, 1, 1, 1]
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        raise ValueError(f"Data type {args.data_type} not supported")
     
-    if args.model == 'unet':
-        model_class = UNetL
-        dataset = MMWHS_single(target = labels, data_dir = args.data_dir, batch_size=args.bs, k_folds=args.k_folds, test_data_dir=args.test_data_dir)
-        dataset.setup()
-    else:
-        print("Model not implemented")
+    cases = range(0,20)
+    kf = KFold(n_splits=args.k_folds, shuffle=True)
+    fold = 0
+    test_dice_tot, test_dice_classes = [], []
 
+    for fold_train, fold_test in kf.split(cases):
+        print(f"Fold {fold}")
+        print(f"TRAINING ON CASES: ", fold_train)
+        dir_checkpoint_fold = os.path.join(dir_checkpoint, f'fold_{fold}')            
+        os.makedirs(dir_checkpoint_fold, exist_ok=True)
 
-    # K-Fold Cross-Validation
-    if args.mode == "train":
-        train(args, dir_checkpoint, model_class, dataset, args.k_folds, device)
+        train_val = np.split(np.array(fold_train), [13, 3])
+        fold_train = list(train_val[0])
+        fold_val = list(train_val[1])
+        dataset_train = dataset_type(args, fold_train, labels)
+        train_loader = DataLoader(dataset_train, batch_size=args.bs, shuffle=True, num_workers=4)
+        dataset_val = dataset_type(args, fold_val, labels) 
+        val_loader = DataLoader(dataset_val, batch_size=args.bs, num_workers=4)
+
+        train(args, dir_checkpoint_fold, device, n_classes, train_loader, val_loader, in_channels)
+
+        dataset_test = dataset_type(args, fold_test, labels, train=False) 
+        test_loader = DataLoader(dataset_test, batch_size=args.bs, num_workers=4)
+        pretrained_filename = glob.glob(os.path.join(dir_checkpoint_fold, "*.pth"))
+
+        dice_tot, dice_classes_tot = test(pretrained_filename[0], test_loader, n_classes, in_channels, device, args.model)
+        fold += 1
+        test_dice_tot.append(dice_tot)
+        test_dice_classes.append(dice_classes_tot)
     
-    elif args.mode == "test":
-        # Check whether pretrained model exists. If yes, load it and skip training
-        pretrained_filenames = glob.glob(os.path.join(dir_checkpoint, "*.ckpt"))
-        
-        # TO DO: adjust for k-fold cross-validation
-        if os.path.isfile(pretrained_filenames[0]):
-            print(f"Found pretrained model, loading...")
-            trainer = pl.Trainer(default_root_dir=dir_checkpoint, max_epochs=args.epochs, accelerator="gpu" if str(device).startswith("cuda") else "cpu", devices=1, logger=logger,
-                            callbacks=ModelCheckpoint(
-                            save_weights_only=True,
-                            dirpath=dir_checkpoint,
-                            filename = "{epoch}-{Validation Mean Dice:.4f}",
-                            monitor="Validation Mean Dice",
-                            mode="max",
-                            save_top_k=1,
-                        ))
-            test(trainer, pretrained_filenames, model_class, dataset, args.k_folds)
-        else:
-            print("No pretrained model found, training from scratch...")
-            train(args, dir_checkpoint, model_class, dataset, args.k_folds, device, logger)
+
+    test_dice_tot = np.array(test_dice_tot)
+    test_dice_classes = np.array(test_dice_classes)
+
+    print("Test results total: ", test_dice_tot)
+    print(f"Mean test dice total: {np.mean(test_dice_tot)}")
+    print(f"Std test dice total: {np.std(test_dice_tot)}")
+
+    for item in range(n_classes):
+        print(f"Test results {item}: ", test_dice_classes[:, item])
+        print(f"Mean test dice {item}: {np.mean(test_dice_classes[:, item])}")
+        print(f"Std test dice {item}: {np.std(test_dice_classes[:, item])}")
 
     
 
@@ -136,34 +204,35 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a Unet model on the MM-WHS dataset')
 
     # Other hyperparameters
-    parser.add_argument('--data_dir', default='../data/other/MR_withGT_proc/annotated', type=str,
+    parser.add_argument('--data_dir', default='../data/other/CT_withGT_proc/annotated', type=str,
                         help='Directory where to look for the data. For jobs on Lisa, this should be $TMPDIR.')
-    parser.add_argument('--test_data_dir', default='../data/other/MR_withGT_proc/annotated', type=str,
-                        help='Directory where to look for the test data.')
-    
+
     parser.add_argument('--epochs', default=10, type=int,
                         help='Max number of epochs')
     parser.add_argument('--seed', default=42, type=int,
                         help='Seed to use for reproducing results')
+    
     parser.add_argument('--lr', default=1e-3, type=float,
                         help='Learning rate')
+    
     parser.add_argument('--bs', default=4, type=int,
                         help='batch_size')
-    parser.add_argument('--modality', default="CT", type=str,
-                        help='Learning rate')
-    parser.add_argument('--model', default='unet', type=str,
-                    help='Baseline used') # other option is drit_unet
+    
+    parser.add_argument('--data_type', default='MMWHS', type=str,
+                    help='Baseline used') 
+    
     parser.add_argument('--name', default='trial', type=str,
-                    help='Baseline used') # other option is drit_unet
-
-    parser.add_argument('--loss', default="BCE", type=str,
-                        help='Loss used during training') # BCE, Dice or DiceBCE
+                    help='Baseline used') 
     
     parser.add_argument('--pred', default='MYO', type=str,
                         help='Prediction of which label') # MYO, LV, RV, MYO_RV, MYO_LV_RV
 
     parser.add_argument('--mode', default='train', type=str,
                         help='train or test')
+    
+
+    parser.add_argument('--model', default='ResUnet', type=str,
+                        help='ResUnet or Unet')
     
      # Add k-folds argument
     parser.add_argument('--k_folds', default=6, type=int, help='Number of folds for K-Fold Cross-Validation')

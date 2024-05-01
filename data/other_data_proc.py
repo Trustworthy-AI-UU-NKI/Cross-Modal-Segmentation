@@ -3,7 +3,7 @@
 from monai.transforms import (
     Compose,
     LoadImaged,
-    ScaleIntensityd,
+    NormalizeIntensityd,
     Resized,
     EnsureChannelFirstd,
     SqueezeDimd,
@@ -72,44 +72,27 @@ def main ():
                     CropAroundMaskd2d(keys=["image", "label"]),
                     Resized(keys=["image"], spatial_size=[256, 256], mode="bilinear"),
                     Resized(keys=["label"], spatial_size=[256, 256], mode="nearest"),
-                    ScaleIntensityd(keys=["image"]),
-                    MapLabelValued(keys=["label"], orig_labels=[205, 420, 500, 550, 600], target_labels=[1, 2, 3, 4, 5]), 
+                    NormalizeIntensityd(keys=["image"]),
+                    MapLabelValued(keys=["label"], orig_labels=[205, 420, 500, 550, 600, 421], target_labels=[1, 2, 3, 4, 5, 0]), 
                 ]
             )
     
     # MRI with GT
     print("MRI")
-    data_dir = "other/MR_withGT"    
-    output_dir = "other/MR_withGT_proc/annotated/"
-    r1 = 20# 1
-    r2 = 21
-    preprocess_data(transforms, data_dir, output_dir, r1, r2, starting_case = 1020)
-
-    # # CT with GT
-    # print("CT")
-    # data_dir = "other/CT_withGT"
-    # output_dir = "other/CT_withGT_proc/annotated/"
-    # r1 = 33
-    # r2 = 53
-    # preprocess_data(transforms, data_dir, output_dir, r1, r2)
-
-    # MRI with 'fake' GT
-    print("MRI with fake GT")
-    data_dir = "other/MR_woGT"    
-    output_dir = "other/MR_withGT_proc/annotated/"
-    r1 = 21
-    r2 = 47
-    starting_case = 1021
-    preprocess_data(transforms, data_dir, output_dir, r1, r2, starting_case = starting_case)
-
-    # CT with 'fake' GT
-    print("CT with fake GT")
-    data_dir = "other/CT_woGT"
-    output_dir = "other/CT_withGT_proc/annotated/"
+    data_dir = "other/MR_withGT/"    
+    output_dir = "true/MRI/"
     r1 = 1
-    r2 = 33
-    starting_case = 1021
-    preprocess_data(transforms, data_dir, output_dir, r1, r2, starting_case = starting_case)
+    r2 = 21
+    preprocess_data(transforms, data_dir, output_dir, r1, r2)
+
+    # CT with GT
+    print("CT")
+    data_dir = "other/CT_withGT/"
+    output_dir = "true/CT/"
+    r1 = 33
+    r2 = 53
+    preprocess_data(transforms, data_dir, output_dir, r1, r2)
+
 
 
 if __name__ == "__main__":

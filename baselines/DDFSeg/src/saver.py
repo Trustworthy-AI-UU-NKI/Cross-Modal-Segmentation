@@ -6,6 +6,7 @@ from PIL import Image
 import SimpleITK as sitk
 import torch 
 import glob
+
 class Saver():
   def __init__(self, fold, args, num_classes=2):
     self.name = os.path.join(args.name, f"fold_{fold}")   
@@ -42,8 +43,9 @@ class Saver():
     self.writer.add_hparams(hparam_dict=hparams, metric_dict={})
 
 
-  def write_val_dsc(self, ep, new_val):
+  def write_val_dsc(self, ep, new_val, new_val_false):
      self.writer.add_scalar("Validation Dice", new_val, ep)
+     self.writer.add_scalar("Validation Dice False", new_val_false, ep)
 
 
   # write losses and images to tensorboard
@@ -63,7 +65,7 @@ class Saver():
 
 
   # save model
-  def write_model(self, ep, model, val_dcs):
+  def write_model(self, ep, model, val_dcs, val_dcs_false):
     print(f"--- Remove old model before saving new one ---")
     # Define the pattern to search for existing model files in the directory
     existing_model_files = glob.glob(f"{self.model_dir}/*.pth")
@@ -77,6 +79,6 @@ class Saver():
   
 
     print(f"--- save the model @ ep {ep} with dcs {val_dcs} ---")
-    filename = f"{self.model_dir}/ep:{ep}_val:{val_dcs}.pth"
+    filename = f"{self.model_dir}/ep:{ep}_val:{val_dcs}_valFalse{val_dcs_false}_.pth"
     model.save(filename, ep)
    

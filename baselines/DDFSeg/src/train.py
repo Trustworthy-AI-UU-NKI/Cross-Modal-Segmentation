@@ -7,49 +7,60 @@ import argparse
 import sys
 import pytorch_lightning as pl
 import numpy as np
-from utils import dice
+from utils import *
 
 from sklearn.model_selection import KFold
 from monai.metrics import DiceMetric
 import os
 
-def validation(model, data_loader, saver, device, ep):
-    dice_scores = []
+def validation(model, data_loader, saver, device, ep, n_classes):
+    dice_tot_true = 0
+    dice_tot_false = 0
+    dice_classes_tot = np.zeros(n_classes)
+    dice_classes_tot_fake = np.zeros(n_classes)
     model.eval()
     print("Validation")
     for it, (images_a, labels_a, images_b, labels_b) in enumerate(data_loader):
         with torch.no_grad():
         # compute self.dice_b_mean --> with keep_rate = 1
+            images_a = images_a.to(device)
             images_b = images_b.to(device)
             labels_b = labels_b.to(device) # one channel with different numbers
-            pred_mask_b = model.forward_eval(images_b) # multiple channel with softmax
+            pred_mask_b, pred_mask_b_false = model.forward_eval(images_a, images_b) # multiple channel with softmax
+        
             dice_b_mean = dice(labels_b.cpu(), pred_mask_b.cpu(), model.num_classes)
+            dice_b_mean_false = dice(labels_a.cpu(), pred_mask_b_false.cpu(), model.num_classes)
             # if it == 0:
             #     saver.write_images(images_b[0, 0, :, :].cpu(), labels_b[0, 0, :, :].cpu(), pred_mask_b[0, 0, :, :].cpu(), ep)
         
-           
-        dice_scores.append(dice_b_mean)
-    
+        dice_tot_true += np.mean(dice_b_mean[1:].cpu().numpy())
+        dice_tot_false += np.mean(dice_b_mean_false[1:].cpu().numpy())
+        dice_classes_tot += dice_b_mean.cpu().numpy()
+        dice_classes_tot_fake += dice_b_mean_false.cpu().numpy()
 
-    dice_scores = np.array(dice_scores)
-    new_val = np.mean(dice_scores)
-    print("new validation dice score:", new_val)
+    new_val_tot = dice_tot_true / len(data_loader)
+    new_val_tot_false = dice_tot_false / len(data_loader)
+    dice_classes_tot /= len(data_loader)
+    dice_classes_tot_fake /= len(data_loader)
 
-    saver.write_val_dsc(ep, new_val)
+    print("new validation dice score:", new_val_tot)
+    print("new validation dice score false:", new_val_tot_false)
+    for i in range(len(dice_classes_tot)):
+        print(f"Class {i} dice score: {dice_classes_tot[i]}")
+        print(f"Class {i} fake dice score: {dice_classes_tot_fake[i]}")
 
-    if new_val > model.val_dice:
-        model.val_dice = new_val
-        saver.write_model(ep, model, new_val)
+    saver.write_val_dsc(ep, new_val_tot, new_val_tot_false)
+
+    if new_val_tot_false > model.val_dice:
+        model.val_dice = new_val_tot_false
+        saver.write_model(ep, model, new_val_tot, new_val_tot_false)
 
 
-def train(train_loader, val_loader, fold, device, args, num_classes, len_train_data):
+def train(train_loader, val_loader, fold, device, args, num_classes, len_train_data, in_channels):
     # model
     print('\n--- load model ---')
-    model = DDFSeg(args, num_classes)
+    model = DDFSeg(args, channel_im=in_channels, num_classes=num_classes)
     model.setgpu(device)
-
-    # how with different folds? 
-    # if args.resume:
 
     # saver for display and output
     saver = Saver(fold, args, num_classes)
@@ -92,19 +103,25 @@ def train(train_loader, val_loader, fold, device, args, num_classes, len_train_d
         saver.write_display(ep, model)
 
         # Save the best val model
-        validation(model, val_loader, saver, device, ep)
+        validation(model, val_loader, saver, device, ep, num_classes)
     
 
 
 def main(args):
     pl.seed_everything(args.seed)
 
-    if args.pred == "MYO":
-        labels = [1, 0, 0, 0, 0, 0, 0]
-        num_classes = 2
+    labels, num_classes = get_labels(args.pred)
+
+    # MMWHS Dataset
+    if args.data_type == "MMWHS":
+        dataset_type = MMWHS
+        in_channels = 1
+    elif args.data_type == "RetinalVessel":
+        NotImplementedError
+        # dataset_type = Retinal_Vessel
+        # in_channels = 3
     else:
-        labels = [1, 2, 3, 4, 5, 6, 7]
-        num_classes = 8
+        raise ValueError(f"Data type {args.data_type} not supported")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     source_cases = range(0,20)
@@ -116,15 +133,17 @@ def main(args):
     for (fold_source_train, fold_source_val), (fold_target_train, fold_target_val)  in zip(kf.split(source_cases), kf.split(target_cases)):
         
         print("loading train data")
-        dataset_train = MMWHS(args, labels, fold_target_train, fold_source_train)
+        dataset_train = dataset_type(args, labels, fold_target_train, fold_source_train)
         train_loader = DataLoader(dataset_train, batch_size=args.bs, shuffle=True, num_workers=4)
         print("loading val data")
-        dataset_val = MMWHS(args, labels, fold_target_val, fold_source_val) 
+        dataset_val = dataset_type(args, labels, fold_target_val, fold_source_val) 
         val_loader = DataLoader(dataset_val, batch_size=args.bs, drop_last=True, num_workers=4)
         len_train_data = dataset_train.__len__()
 
-        train(train_loader, val_loader, fold, device, args, num_classes, len_train_data) 
+        train(train_loader, val_loader, fold, device, args, num_classes, len_train_data, in_channels) 
         fold += 1
+        # print("for now only one fold")
+        # break
 
 
 if __name__ == '__main__':
@@ -157,6 +176,7 @@ if __name__ == '__main__':
     parser.add_argument('--keep_rate', default=0.75, type=float, help='Keep rate for dropout')
     parser.add_argument('--resolution', default=256, type=int, help='Resolution of input images')
     parser.add_argument('--skip', default=True, type=bool, help='Skip connection in the generator')
+    parser.add_argument('--data_type', default='MMWHS', type=str, help='Baseline used')
     
     argv = sys.argv[sys.argv.index("--") + 1:]
     args = parser.parse_args(argv)

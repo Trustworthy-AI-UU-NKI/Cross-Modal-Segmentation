@@ -1,19 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import pytorch_lightning as pl
-from torch.nn import BCEWithLogitsLoss
-from monai.data import  decollate_batch
-from monai.losses import DiceLoss
-from monai.metrics import DiceMetric
-from monai.networks.nets import UNet
-from monai.transforms import (  
-    Activations,
-    AsDiscrete,
-    Compose,
-)
-
-from types import SimpleNamespace
 from monai.losses import DiceLoss
 
 class DiscriminatorLossDouble(nn.Module):
@@ -106,10 +93,6 @@ class SegmentationLoss(nn.Module):
         self.gen_loss = GeneratorLoss(lr_a=lr_a, lr_b=lr_b)
     
     def forward(self, logits, gt, model, prob_fake_x_is_real, input_a, input_b, cycle_input_a, cycle_input_b):
-        # print("in forwars segmentation loss")
-        # unique = torch.unique(gt.long()) 
-        # print("unique in gt", unique)
-
         gt_oh = F.one_hot(gt.long().squeeze(1), num_classes=logits.shape[1]).permute(0, 3, 2, 1)
         dice_loss = self.dice_loss(logits, gt_oh)
         ce_loss = self.wce_loss(logits, gt_oh)

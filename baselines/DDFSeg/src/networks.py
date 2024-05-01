@@ -1,8 +1,4 @@
-import  torch
 import torch.nn as nn
-from torch.autograd import Variable
-import functools
-from torch.optim import lr_scheduler
 import torch.nn.functional as F
 from layers import *
 
@@ -52,7 +48,7 @@ class EncoderCShared(nn.Module):
     def __init__(self, keep_rate=0.75):
         super(EncoderCShared, self).__init__()
         self.layers = nn.Sequential(
-            GeneralConv2d(1, 16, kernel_size=7, stride=1, padding=3, norm_type="batch", keep_rate=keep_rate),
+            GeneralConv2d(3, 16, kernel_size=7, stride=1, padding=3, norm_type="batch", keep_rate=keep_rate),
             ResNetBlock(16, norm_type="batch", padding="constant", keep_rate=keep_rate),
             nn.MaxPool2d(kernel_size=2, stride=2),
             ResNetBlockDS(16, 32, padding="constant", norm_type="batch", keep_rate=keep_rate),
@@ -70,7 +66,7 @@ class EncoderCShared(nn.Module):
             ResNetBlock(512, norm_type="batch", padding="constant", keep_rate=keep_rate)
         )
 
-    #input == [B, C, H, W] == [B, 1, 256, 256]
+    #input == [B, C, H, W] == [B, 3, 256, 256]
     #output == [B, C, H, W] == [B, 512, 32, 32]
     def forward(self, x):
         return self.layers(x)
@@ -95,7 +91,7 @@ class EncoderS(nn.Module):
     def __init__(self, keep_rate=0.75):
         super(EncoderS, self).__init__()
         self.layers = nn.Sequential(
-            GeneralConv2d(1, 8, kernel_size=7, stride=1, padding=3, norm_type="batch", keep_rate=keep_rate),
+            GeneralConv2d(3, 8, kernel_size=7, stride=1, padding=3, norm_type="batch", keep_rate=keep_rate),
             ResNetBlock(8, norm_type="batch", padding="constant", keep_rate=keep_rate),
             nn.MaxPool2d(kernel_size=2, stride=2),
             ResNetBlockDS(8, 16, padding="constant", norm_type="batch", keep_rate=keep_rate),
@@ -106,7 +102,7 @@ class EncoderS(nn.Module):
             GeneralConv2d(32, 32, kernel_size=3, stride=1, padding=1, norm_type="batch", keep_rate=keep_rate),
             GeneralConv2d(32, 32, kernel_size=3, stride=1, padding=1, norm_type="batch", keep_rate=keep_rate)
         )
-    # input == [B, C, H, W] == [B, 1, 256, 256]
+    # input == [B, C, H, W] == [B, 3, 256, 256]
     # output == [B, C, H, W] == [B, 32, 32, 32]
     def forward(self, x):
         return self.layers(x)
@@ -136,7 +132,7 @@ class DecoderShared(nn.Module):
 
 # decodera and decoderb in tf code
 class Decoder(nn.Module):
-    def __init__(self, skip=False):
+    def __init__(self, channels_out = 1, skip=False):
         super(Decoder, self).__init__()
         self.skip = skip
         self.layers = nn.Sequential(
@@ -148,7 +144,7 @@ class Decoder(nn.Module):
             GeneralDeconv2d(128, 64, kernel_size=3, stride=2, stddev=0.02, padding=1, output_padding=1, norm_type="ins"),
             GeneralDeconv2d(64, 64, kernel_size=3, stride=2, stddev=0.02, padding=1, output_padding=1, norm_type="ins"),
             GeneralDeconv2d(64, 32, kernel_size=3, stride=2, stddev=0.02, padding=1, output_padding=1,  norm_type="ins"),
-            GeneralConv2d(32, 1, kernel_size=7, stride=1, stddev=0.02, padding=3, do_norm=False, do_relu=False)
+            GeneralConv2d(32, channels_out, kernel_size=7, stride=1, stddev=0.02, padding=3, do_norm=False, do_relu=False)
         )
     
     # input x_de == [B, C, H, W] == [B, 128, 32, 32]
