@@ -43,9 +43,10 @@ class Saver():
     self.writer.add_hparams(hparam_dict=hparams, metric_dict={})
 
 
-  def write_val_dsc(self, ep, new_val, new_val_false):
+  def write_val_dsc(self, ep, new_val, new_val_false, assd):
      self.writer.add_scalar("Validation Dice", new_val, ep)
      self.writer.add_scalar("Validation Dice False", new_val_false, ep)
+     self.writer.add_scalar("Validation ASSD", assd, ep)
 
 
   # write losses and images to tensorboard

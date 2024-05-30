@@ -1,24 +1,14 @@
-import os
+
 import torch
-import argparse
-import sys
-import glob
-import pytorch_lightning as pl
-
-from torch.utils.data import DataLoader
-from data import MMWHS_single
-import torch.optim as optim
-import numpy as np
-
-
-from monai.metrics import DiceMetric
-from monai.networks.nets import UNet
+from monai.metrics import DiceMetric, HausdorffDistanceMetric, SurfaceDistanceMetric
 import torch.nn as nn
-from sklearn.model_selection import KFold 
 from monai.losses import DiceLoss
 import torch.nn.functional as F
 
-from torch.utils.tensorboard import SummaryWriter
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
 
 
 class DiceLossMC(nn.Module):
@@ -59,6 +49,41 @@ def dice(labels, pred, n_class):
 
     return metric.detach().cpu().numpy()
 
+def assd(labels, pred, n_class, pixdim):
+    
+    assd_metric = SurfaceDistanceMetric(reduction="mean_batch", symmetric=True)#_batch")
+    # print(compact_pred.shape)
+    # print(labels.shape)
+    compact_pred = torch.argmax(pred, dim=1).unsqueeze(1)
+    compact_pred_oh = F.one_hot(compact_pred.long().squeeze(1), n_class).permute(0, 3, 1, 2)
+
+    labels_oh = F.one_hot(labels.long().squeeze(1), n_class).permute(0, 3, 1, 2)
+    # print(labels_oh.shape)
+
+    # Compute the hd score
+    assd_metric(y_pred=compact_pred_oh, y=labels_oh)
+    metric = assd_metric.aggregate()
+    assd_metric.reset()
+
+    return metric.detach().cpu().numpy() * pixdim 
+
+def hd(labels, pred, n_class):
+    hd_metric = HausdorffDistanceMetric(reduction="mean_batch")#_batch")
+    # print(compact_pred.shape)
+    # print(labels.shape)
+    compact_pred = torch.argmax(pred, dim=1).unsqueeze(1)
+    compact_pred_oh = F.one_hot(compact_pred.long().squeeze(1), n_class).permute(0, 3, 1, 2)
+
+    labels_oh = F.one_hot(labels.long().squeeze(1), n_class).permute(0, 3, 1, 2)
+    # print(labels_oh.shape)
+
+    # Compute the hd score
+    hd_metric(y_pred=compact_pred_oh, y=labels_oh)
+    metric = hd_metric.aggregate()
+    hd_metric.reset()
+
+    return metric.detach().cpu().numpy()
+
 
 def get_labels(pred):
     # match case statement
@@ -71,6 +96,18 @@ def get_labels(pred):
             n_classes = 2
         case "RV":
             labels = [0, 0, 0, 0, 1, 0, 0]
+            n_classes = 2
+        case "liver":
+            labels = [1, 0, 0, 0]
+            n_classes = 2
+        case "RK":
+            labels = [0, 1, 0, 0]
+            n_classes = 2
+        case "LK":
+            labels = [0, 0, 1, 0]
+            n_classes = 2
+        case "Spleen":
+            labels = [0, 0, 0, 1]
             n_classes = 2
         case "MYO_LV_RV":
             labels = [1, 0, 2, 0, 3, 0, 0]
@@ -123,9 +160,6 @@ class UNet_model(nn.Module):
 
 """ Parts of the U-Net model """
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 
 class DoubleConv(nn.Module):

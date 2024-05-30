@@ -4,9 +4,10 @@ import argparse
 import sys
 import glob
 import pytorch_lightning as pl
+import random
 
 from torch.utils.data import DataLoader
-from data import MMWHS_single, Retinal_Vessel_single
+from data import MMWHS_single, CHAOS
 import torch.optim as optim
 import numpy as np
 
@@ -134,6 +135,87 @@ def test(model_file, test_loader, n_classes, in_channels, device, model_type):
     return dice_tot, dice_classes_tot
 
 
+
+def k_fold_drit(args, dir_checkpoint, dataset_type, labels, device, n_classes, in_channels):
+    cases = range(0,20)
+    kf = KFold(n_splits=args.k_folds, shuffle=True)
+    fold = 0
+    test_dice_tot, test_dice_classes = [], []
+
+    for fold_train, fold_test in kf.split(cases):
+        print(f"Fold {fold}")
+        print(f"TRAINING ON CASES: ", fold_train)
+        dir_checkpoint_fold = os.path.join(dir_checkpoint, f'fold_{fold}')            
+        os.makedirs(dir_checkpoint_fold, exist_ok=True)
+
+        data_dir = os.path.join(args.data_dir, f"run_fold_{fold}")
+
+        random.shuffle(fold_train)
+        print("train_val: ", fold_train)
+        fold_train2 = fold_train[:13]
+        print("train:", fold_train2)
+        fold_val2 = fold_train[13:]
+        print("val: ", fold_val2)
+        dataset_train = dataset_type(data_dir, fold_train2, labels)
+        train_loader = DataLoader(dataset_train, batch_size=args.bs, shuffle=True, num_workers=4)
+        dataset_val = dataset_type(data_dir, fold_val2, labels) 
+        val_loader = DataLoader(dataset_val, batch_size=args.bs, num_workers=4)
+
+        train(args, dir_checkpoint_fold, device, n_classes, train_loader, val_loader, in_channels)
+
+        dataset_test = dataset_type(args.data_dir_test, fold_test, labels) 
+        test_loader = DataLoader(dataset_test, batch_size=args.bs, num_workers=4)
+        pretrained_filename = glob.glob(os.path.join(dir_checkpoint_fold, "*.pth"))
+
+        dice_tot, dice_classes_tot = test(pretrained_filename[0], test_loader, n_classes, in_channels, device, args.model)
+        
+        fold += 1
+        test_dice_tot.append(dice_tot)
+        test_dice_classes.append(dice_classes_tot)
+    
+
+    return np.array(test_dice_tot), np.array(test_dice_classes)
+
+
+def k_fold_normal(args, dir_checkpoint, dataset_type, labels, device, n_classes, in_channels):
+    cases = range(0,20)
+    kf = KFold(n_splits=args.k_folds, shuffle=True)
+    fold = 0
+    test_dice_tot, test_dice_classes = [], []
+
+    for fold_train, fold_test in kf.split(cases):
+        print(f"Fold {fold}")
+        print(f"TRAINING ON CASES: ", fold_train)
+        dir_checkpoint_fold = os.path.join(dir_checkpoint, f'fold_{fold}')            
+        os.makedirs(dir_checkpoint_fold, exist_ok=True)
+
+        random.shuffle(fold_train)
+        print("train_val: ", fold_train)
+        fold_train2 = fold_train[:13]
+        print("train:", fold_train2)
+        fold_val2 = fold_train[13:]
+        print("val: ", fold_val2)
+        dataset_train = dataset_type(args.data_dir, fold_train2, labels)
+        train_loader = DataLoader(dataset_train, batch_size=args.bs, shuffle=True, num_workers=4)
+        dataset_val = dataset_type(args.data_dir, fold_val2, labels) 
+        val_loader = DataLoader(dataset_val, batch_size=args.bs, num_workers=4)
+
+        train(args, dir_checkpoint_fold, device, n_classes, train_loader, val_loader, in_channels)
+
+        dataset_test = dataset_type(args.data_dir_test, fold_test, labels) 
+        test_loader = DataLoader(dataset_test, batch_size=args.bs, num_workers=4)
+        pretrained_filename = glob.glob(os.path.join(dir_checkpoint_fold, "*.pth"))
+
+        dice_tot, dice_classes_tot = test(pretrained_filename[0], test_loader, n_classes, in_channels, device, args.model)
+        fold += 1
+        test_dice_tot.append(dice_tot)
+        test_dice_classes.append(dice_classes_tot)
+    
+
+    return np.array(test_dice_tot), np.array(test_dice_classes)
+
+
+
 def main(args):
 
     pl.seed_everything(args.seed)
@@ -149,45 +231,16 @@ def main(args):
     if args.data_type == "MMWHS":
         dataset_type = MMWHS_single
         in_channels = 1
-    elif args.data_type == "RetinalVessel":
-        dataset_type = Retinal_Vessel_single
-        in_channels = 3
+    elif args.data_type == "chaos":
+        dataset_type = CHAOS
+        in_channels = 1
     else:
         raise ValueError(f"Data type {args.data_type} not supported")
     
-    cases = range(0,20)
-    kf = KFold(n_splits=args.k_folds, shuffle=True)
-    fold = 0
-    test_dice_tot, test_dice_classes = [], []
-
-    for fold_train, fold_test in kf.split(cases):
-        print(f"Fold {fold}")
-        print(f"TRAINING ON CASES: ", fold_train)
-        dir_checkpoint_fold = os.path.join(dir_checkpoint, f'fold_{fold}')            
-        os.makedirs(dir_checkpoint_fold, exist_ok=True)
-
-        train_val = np.split(np.array(fold_train), [13, 3])
-        fold_train = list(train_val[0])
-        fold_val = list(train_val[1])
-        dataset_train = dataset_type(args, fold_train, labels)
-        train_loader = DataLoader(dataset_train, batch_size=args.bs, shuffle=True, num_workers=4)
-        dataset_val = dataset_type(args, fold_val, labels) 
-        val_loader = DataLoader(dataset_val, batch_size=args.bs, num_workers=4)
-
-        train(args, dir_checkpoint_fold, device, n_classes, train_loader, val_loader, in_channels)
-
-        dataset_test = dataset_type(args, fold_test, labels, train=False) 
-        test_loader = DataLoader(dataset_test, batch_size=args.bs, num_workers=4)
-        pretrained_filename = glob.glob(os.path.join(dir_checkpoint_fold, "*.pth"))
-
-        dice_tot, dice_classes_tot = test(pretrained_filename[0], test_loader, n_classes, in_channels, device, args.model)
-        fold += 1
-        test_dice_tot.append(dice_tot)
-        test_dice_classes.append(dice_classes_tot)
-    
-
-    test_dice_tot = np.array(test_dice_tot)
-    test_dice_classes = np.array(test_dice_classes)
+    if args.drit:
+        test_dice_tot, test_dice_classes = k_fold_drit(args, dir_checkpoint, dataset_type, labels, device, n_classes, in_channels)
+    else:
+        test_dice_tot, test_dice_classes = k_fold_normal(args, dir_checkpoint, dataset_type, labels, device, n_classes, in_channels)
 
     print("Test results total: ", test_dice_tot)
     print(f"Mean test dice total: {np.mean(test_dice_tot)}")
@@ -205,6 +258,9 @@ if __name__ == '__main__':
 
     # Other hyperparameters
     parser.add_argument('--data_dir', default='../data/other/CT_withGT_proc/annotated', type=str,
+                        help='Directory where to look for the data. For jobs on Lisa, this should be $TMPDIR.')
+    
+    parser.add_argument('--data_dir_test', default='../data/other/CT_withGT_proc/annotated', type=str,
                         help='Directory where to look for the data. For jobs on Lisa, this should be $TMPDIR.')
 
     parser.add_argument('--epochs', default=10, type=int,
@@ -233,6 +289,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--model', default='ResUnet', type=str,
                         help='ResUnet or Unet')
+    
+    parser.add_argument('--drit', action='store_true')
     
      # Add k-folds argument
     parser.add_argument('--k_folds', default=6, type=int, help='Number of folds for K-Fold Cross-Validation')

@@ -1,4 +1,6 @@
 MMWHS_Dataset/
+CHAOS_MR/
+preprocessed_chaos/
 jobs/
 data/preprocessed
 data/other

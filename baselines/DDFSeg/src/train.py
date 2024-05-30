@@ -18,6 +18,7 @@ def validation(model, data_loader, saver, device, ep, n_classes):
     dice_tot_false = 0
     dice_classes_tot = np.zeros(n_classes)
     dice_classes_tot_fake = np.zeros(n_classes)
+    assd_classes_tot = 0
     model.eval()
     print("Validation")
     for it, (images_a, labels_a, images_b, labels_b) in enumerate(data_loader):
@@ -30,6 +31,10 @@ def validation(model, data_loader, saver, device, ep, n_classes):
         
             dice_b_mean = dice(labels_b.cpu(), pred_mask_b.cpu(), model.num_classes)
             dice_b_mean_false = dice(labels_a.cpu(), pred_mask_b_false.cpu(), model.num_classes)
+
+            assert images_b.meta["pixdim"][1] == images_b.meta["pixdim"][2]
+
+            assd_classes = assd(labels_b, pred_mask_b, n_classes, pixdim=images_b.meta["pixdim"][1])
             # if it == 0:
             #     saver.write_images(images_b[0, 0, :, :].cpu(), labels_b[0, 0, :, :].cpu(), pred_mask_b[0, 0, :, :].cpu(), ep)
         
@@ -37,23 +42,25 @@ def validation(model, data_loader, saver, device, ep, n_classes):
         dice_tot_false += np.mean(dice_b_mean_false[1:].cpu().numpy())
         dice_classes_tot += dice_b_mean.cpu().numpy()
         dice_classes_tot_fake += dice_b_mean_false.cpu().numpy()
+        assd_classes_tot += assd_classes.item()
+
 
     new_val_tot = dice_tot_true / len(data_loader)
     new_val_tot_false = dice_tot_false / len(data_loader)
     dice_classes_tot /= len(data_loader)
     dice_classes_tot_fake /= len(data_loader)
+    assd_classes_tot /= len(data_loader)
 
-    print("new validation dice score:", new_val_tot)
-    print("new validation dice score false:", new_val_tot_false)
-    for i in range(len(dice_classes_tot)):
-        print(f"Class {i} dice score: {dice_classes_tot[i]}")
-        print(f"Class {i} fake dice score: {dice_classes_tot_fake[i]}")
 
-    saver.write_val_dsc(ep, new_val_tot, new_val_tot_false)
+
+    saver.write_val_dsc(ep, new_val_tot, new_val_tot_false, assd_classes_tot)
 
     if new_val_tot_false > model.val_dice:
         model.val_dice = new_val_tot_false
         saver.write_model(ep, model, new_val_tot, new_val_tot_false)
+        print("new validation dice score:", new_val_tot)
+        print("new validation dice score false:", new_val_tot_false)
+        print("new validation assd:", assd_classes_tot)
 
 
 def train(train_loader, val_loader, fold, device, args, num_classes, len_train_data, in_channels):
@@ -98,13 +105,14 @@ def train(train_loader, val_loader, fold, device, args, num_classes, len_train_d
             total_it += 1
             model.update_num_fake_inputs()
 
+
         model.update_lr(ep)
         
         saver.write_display(ep, model)
 
         # Save the best val model
         validation(model, val_loader, saver, device, ep, num_classes)
-    
+  
 
 
 def main(args):
@@ -124,26 +132,28 @@ def main(args):
         raise ValueError(f"Data type {args.data_type} not supported")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    source_cases = range(0,20)
-    target_cases = range(0,18)
+    cases = range(0,20)
     kf = KFold(n_splits=args.k_folds, shuffle=True)
     fold = 0
+
     
- 
-    for (fold_source_train, fold_source_val), (fold_target_train, fold_target_val)  in zip(kf.split(source_cases), kf.split(target_cases)):
+    # for fold_train, fold_test_val in kf.split(cases):
+    for fold_train_val, fold_test in kf.split(cases):
+        save_dir = os.path.join(args.result_dir,  os.path.join(args.name, f'fold_{fold}'))
+        os.makedirs(save_dir, exist_ok=True)
+        log_dir = os.path.join(args.display_dir, os.path.join(args.name, f'fold_{fold}'))
+        os.makedirs(log_dir, exist_ok=True)
         
         print("loading train data")
-        dataset_train = dataset_type(args, labels, fold_target_train, fold_source_train)
+        dataset_train = dataset_type(args, labels, fold_train_val, fold_train_val)
         train_loader = DataLoader(dataset_train, batch_size=args.bs, shuffle=True, num_workers=4)
         print("loading val data")
-        dataset_val = dataset_type(args, labels, fold_target_val, fold_source_val) 
-        val_loader = DataLoader(dataset_val, batch_size=args.bs, drop_last=True, num_workers=4)
+        dataset_val = dataset_type(args, labels, fold_test, fold_test) 
+        val_loader = DataLoader(dataset_val, batch_size=1, num_workers=4)
         len_train_data = dataset_train.__len__()
 
         train(train_loader, val_loader, fold, device, args, num_classes, len_train_data, in_channels) 
         fold += 1
-        # print("for now only one fold")
-        # break
 
 
 if __name__ == '__main__':
@@ -151,8 +161,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train the DDFSeg model on the MM-WHS dataset')
     
     # data loader related
-    parser.add_argument('--data_dir1', type=str, default='../../../data/other/MR_withGT_proc/annotated/', help='path of data to domain 1 - source domain')
-    parser.add_argument('--data_dir2', type=str, default='../../../data/other/CT_withGT_proc/annotated/', help='path of data to domain 2 - target domain')
+    parser.add_argument('--data_dir1', type=str, default='../../../data/other/MR_withGT_proc/', help='path of data to domain 1 - source domain')
+    parser.add_argument('--data_dir2', type=str, default='../../../data/other/CT_withGT_proc/', help='path of data to domain 2 - target domain')
     parser.add_argument('--resume', type=str, default=None, help='specified the dir of saved models for resume the training')
 
     # ouptput related

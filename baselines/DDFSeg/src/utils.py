@@ -1,5 +1,5 @@
 import torch
-from monai.metrics import DiceMetric
+from monai.metrics import DiceMetric, SurfaceDistanceMetric
 import torch.nn.functional as F
 import numpy as np
 
@@ -21,6 +21,24 @@ def dice(labels, pred, n_class):
     dice_metric.reset()
 
     return metric
+
+def assd(labels, pred, n_class, pixdim):
+    
+    assd_metric = SurfaceDistanceMetric(reduction="mean_batch", symmetric=True)#_batch")
+    # print(compact_pred.shape)
+    # print(labels.shape)
+    compact_pred = torch.argmax(pred, dim=1).unsqueeze(1)
+    compact_pred_oh = F.one_hot(compact_pred.long().squeeze(1), n_class).permute(0, 3, 1, 2)
+
+    labels_oh = F.one_hot(labels.long().squeeze(1), n_class).permute(0, 3, 1, 2)
+    # print(labels_oh.shape)
+
+    # Compute the hd score
+    assd_metric(y_pred=compact_pred_oh, y=labels_oh)
+    metric = assd_metric.aggregate()
+    assd_metric.reset()
+
+    return metric * pixdim 
 
 def get_labels(pred):
     # match case statement

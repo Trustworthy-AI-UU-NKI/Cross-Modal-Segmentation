@@ -17,16 +17,16 @@ import itertools
 
 
 class MMWHS_single(Dataset):
-    def __init__(self, args, fold, labels = [1, 0, 0, 0, 0, 0, 0], train=True):
-        self.data_dir = args.data_dir
+    def __init__(self, data_dir, fold, labels = [1, 0, 0, 0, 0, 0, 0]):
+        self.data_dir = data_dir
         self.target_labels = labels
         print(self.data_dir)
 
         self.all_images = sorted(glob.glob(os.path.join(self.data_dir, "images/case_10*")))
         self.all_labels = sorted(glob.glob(os.path.join(self.data_dir, "labels/case_10*")))
 
-        print(self.all_images)
-        print(self.all_labels)
+        # print(self.all_images)
+        # print(self.all_labels)
 
         images = [glob.glob(self.all_images[idx]+ "/*.nii.gz") for idx in fold]
         self.imgs = sorted(list(itertools.chain.from_iterable(images)))
@@ -35,31 +35,6 @@ class MMWHS_single(Dataset):
         
         self.dataset_size = len(self.imgs)
 
-        self.transforms_seg = Compose(
-                [
-                LoadImage(),
-                MapLabelValue(orig_labels=[1, 2, 3, 4, 5, 6, 7], target_labels=self.target_labels),
-                MapLabelValue(orig_labels=[421], target_labels=[0]), 
-
-                ])
-        
-        self.transform_img = Compose(
-                [
-                LoadImage(),
-                ])
-
-        # if train:
-        #     self.transform_dict = Compose(
-        #         [
-        #             LoadImaged(keys=["img", "seg"]),
-        #             MapLabelValued(keys=["seg"], orig_labels=[1, 2, 3, 4, 5, 6, 7], target_labels=self.target_labels),
-        #             MapLabelValued(keys=["seg"], orig_labels=[421], target_labels=[0]),
-        #             RandFlipd(keys=["img", "seg"], prob=0.5, spatial_axis=0),
-        #             RandFlipd(keys=["img", "seg"], prob=0.5, spatial_axis=1),
-        #             RandRotated(keys=["img", "seg"], prob=0.5, range_x=[0.4, 0.4], mode=["bilinear", "nearest"])
-        #         ]
-        #     )
-        # else:
         self.transform_dict = Compose(
             [
                 LoadImaged(keys=["img", "seg"]),
@@ -67,8 +42,8 @@ class MMWHS_single(Dataset):
                 MapLabelValued(keys=["seg"], orig_labels=[421], target_labels=[0]),
             ]
         )
-        
         self.data = [{"img": img, "seg": seg} for img, seg in zip(self.imgs, self.labs)] 
+        
 
 
 
@@ -86,13 +61,14 @@ class MMWHS_single(Dataset):
     
 
 # TO IMPLEMENT
-class Retinal_Vessel_single(Dataset):
-    def __init__(self, args, fold, labels = [1, 0, 0, 0, 0, 0, 0]):
-        self.data_dir = args.data_dir
+class CHAOS(Dataset):
+    def __init__(self, data_dir, fold, labels = [1, 0, 0, 0]):
+        self.data_dir = data_dir
         self.target_labels = labels
+        print("CHAOS dataset ", self.data_dir)
 
-        self.all_images = sorted(glob.glob(os.path.join(self.data_dir, "images/case_10*")))
-        self.all_labels = sorted(glob.glob(os.path.join(self.data_dir, "labels/case_10*")))
+        self.all_images = sorted(glob.glob(os.path.join(self.data_dir, "images/case_*")))
+        self.all_labels = sorted(glob.glob(os.path.join(self.data_dir, "labels/case_*")))
 
         images = [glob.glob(self.all_images[idx]+ "/*.nii.gz") for idx in fold]
         self.imgs = sorted(list(itertools.chain.from_iterable(images)))
@@ -101,24 +77,21 @@ class Retinal_Vessel_single(Dataset):
         
         self.dataset_size = len(self.imgs)
 
-        self.transforms_seg = Compose(
-                [
-                LoadImage(),
-                MapLabelValue(orig_labels=[1, 2, 3, 4, 5, 6, 7], target_labels=self.target_labels),
-                MapLabelValue(orig_labels=[421], target_labels=[0])
-                ])
-        
-        self.transform_img = Compose(
-                [
-                LoadImage(),
-                ])
+        self.transform_dict = Compose(
+            [
+                LoadImaged(keys=["img", "seg"], image_only=False),
+                MapLabelValued(keys=["seg"], orig_labels=[1, 2, 3, 4], target_labels=self.target_labels),
+            ]
+        )
+        self.data = [{"img": img, "seg": seg} for img, seg in zip(self.imgs, self.labs)] 
 
 
     def __getitem__(self, index):
-        image = self.transform_img(self.imgs[index])
-        label = self.transforms_seg(self.labs[index])
-
-        return image, label
+        data_point = self.transform_dict(self.data[index])
+        
+        image = data_point["img"]
+        label = data_point["seg"]
+        return image.unsqueeze(0), label.unsqueeze(0)
 
     def __len__(self):
         return self.dataset_size

@@ -7,14 +7,21 @@ import argparse
 import sys
 import pytorch_lightning as pl
 import numpy as np
-from utils import dice
+from utils import *
 import glob
 
 from sklearn.model_selection import KFold
 from monai.metrics import DiceMetric
 import os
 
-def test(model_file, data_loader, device, num_classes):
+def test(save_dir, data_loader, device, num_classes):
+    pretrained_model = glob.glob(os.path.join(save_dir, "*.pth"))
+
+    if pretrained_model == []:
+        print("no pretrained model found!")
+        quit()
+    else:
+        model_file = pretrained_model[0]
 
     print("Loading model")
     model = DDFSeg(args, num_classes)
@@ -22,8 +29,10 @@ def test(model_file, data_loader, device, num_classes):
     model.resume(model_file)
     model.eval()
 
-    dice_scores = []
     print("Testing")
+    dice_class_tot = 0
+    dice_bg_tot = 0
+    assd_classes_tot = 0
     for it, (images, labels) in enumerate(data_loader):
         with torch.no_grad():
         # compute self.dice_b_mean --> with keep_rate = 1
@@ -31,60 +40,88 @@ def test(model_file, data_loader, device, num_classes):
             labels = labels.to(device) # one channel with different numbers
             pred_mask_b = model.forward_eval(images) # multiple channel with softmax
             dice_b_mean = dice(labels.cpu(), pred_mask_b.cpu(), model.num_classes)
+            assd_classes = assd(labels, pred_mask_b, num_classes, pixdim=images.meta["pixdim"][1])
            
-        dice_scores.append(dice_b_mean)
+        dice_class_tot += dice_b_mean.cpu().numpy()[1]
+        dice_bg_tot += dice_b_mean.cpu().numpy()[0]
+        assd_classes_tot += assd_classes.item()
     
 
-    dice_scores = np.array(dice_scores)
-    mean_dsc = np.mean(dice_scores)
+    assd_classes_tot /= len(data_loader)
+    dice_class_tot /= len(data_loader)
+    dice_bg_tot /= len(data_loader)
 
-    print("Mean Dice Score:", mean_dsc)
-    return mean_dsc
+    return dice_class_tot, dice_bg_tot, assd_classes_tot
 
 
 def main(args):
-    pl.seed_everything(args.seed)
+    labels, num_classes = get_labels(args.pred)
 
-    if args.pred == "MYO":
-        labels = [1, 0, 0, 0, 0, 0, 0]
-        num_classes = 2
+    # MMWHS Dataset
+    if args.data_type == "MMWHS":
+        dataset_type = MMWHS_single
+        in_channels = 1
+    elif args.data_type == "RetinalVessel":
+        NotImplementedError
+        # dataset_type = Retinal_Vessel
+        # in_channels = 3
     else:
-        labels = [1, 2, 3, 4, 5, 6, 7]
-        num_classes = 8
-    
-    test_fold = [18, 19]
-
-    dataset_test = MMWHS_single(args, test_fold, labels)
-    test_loader = DataLoader(dataset_test, batch_size=args.bs, drop_last=True, num_workers=4)
+        raise ValueError(f"Data type {args.data_type} not supported")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    pretrained_filenames = glob.glob(os.path.join(args.resume, "fold_*/*.pth"))
-    
+    cases = range(0,20)
+    kf = KFold(n_splits=args.k_folds, shuffle=True)
+    fold = 0
+    dsc_scores_BG = []
     dsc_scores = []
-    pretrained_found = False
-    for it, model_file in enumerate(pretrained_filenames):
-        print(f"Testing model {it+1}/{len(pretrained_filenames)}")
-        dsc = test(model_file, test_loader, device, num_classes)
+    assd_scores = []
+    # for fold_train, fold_test_val in kf.split(cases):
+    for fold_train_val, fold_test in kf.split(cases):
+        save_dir = os.path.join(args.result_dir,  os.path.join(args.name, f'fold_{fold}'))
+        os.makedirs(save_dir, exist_ok=True)
+        log_dir = os.path.join(args.display_dir, os.path.join(args.name, f'fold_{fold}'))
+        os.makedirs(log_dir, exist_ok=True)
+        
+        print("loading test data")
+        dataset_test = dataset_type(args, labels, fold_test, fold_test) 
+        test_loader = DataLoader(dataset_test, batch_size=1, num_workers=4)
+
+        dsc, dsc_bg, assd = test(save_dir, test_loader, device, num_classes)
         dsc_scores.append(dsc)
-        pretrained_found = True
+        dsc_scores_BG.append(dsc_bg)
+        assd_scores.append(assd)
 
-    if pretrained_found:
-        dsc_scores = np.array(dsc_scores)
-        mean_dsc = np.mean(dsc_scores)
-        std_dsc = np.std(dsc_scores)
-        print("FINAL RESULTS")
-        print(f"Mean DSC: {mean_dsc}, Std DSC: {std_dsc}")
-    else:
-        print("No pretrained models found")
+        
+        fold += 1
+    
+    dsc_scores_BG = np.array(dsc_scores_BG)
+    mean_dsc_BG = np.mean(dsc_scores_BG)
+    std_dsc_BG = np.std(dsc_scores_BG)
+    print("FINAL RESULTS BG")
+    print("DSC_0: ", dsc_scores_BG)
+    print(f"Mean DSC_0: {mean_dsc_BG}, Std DSC_0: {std_dsc_BG}")
 
 
+    dsc_scores = np.array(dsc_scores)
+    mean_dsc = np.mean(dsc_scores)
+    std_dsc = np.std(dsc_scores)
+    print("FINAL RESULTS")
+    print("DSC_1: ", dsc_scores)
+    print(f"Mean DSC_1: {mean_dsc}, Std DSC_1: {std_dsc}")
+
+    assd_scores = np.array(assd_scores)
+    mean_assd = np.mean(assd_scores)
+    std_assd = np.std(assd_scores)
+    print("ASSD: ", assd_scores)
+    print(f"Mean ASSD: {mean_assd}, Std ASSD: {std_assd}")
+   
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Train the DDFSeg model on the MM-WHS dataset')
     
     # data loader related
-    parser.add_argument('--test_data_dir', type=str, default='../../../data/other/CT_withGT_proc/annotated/', help='path of data to domain 1 - source domain')
+    parser.add_argument('--test_data_dir', type=str, default='../../../data/other/CT_withGT_proc/', help='path of data to domain 1 - source domain')
     parser.add_argument('--resume', type=str, default='../results/trialepoch100/', help='specified the dir of saved models for resume the training')
 
     # testing related
