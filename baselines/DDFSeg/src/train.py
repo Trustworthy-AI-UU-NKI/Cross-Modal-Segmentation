@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import DataLoader
-from dataset import MMWHS
+from dataset import MMWHS, CHAOS
 from saver import Saver
 from model import DDFSeg
 import argparse
@@ -32,7 +32,7 @@ def validation(model, data_loader, saver, device, ep, n_classes):
             dice_b_mean = dice(labels_b.cpu(), pred_mask_b.cpu(), model.num_classes)
             dice_b_mean_false = dice(labels_a.cpu(), pred_mask_b_false.cpu(), model.num_classes)
 
-            assert images_b.meta["pixdim"][1] == images_b.meta["pixdim"][2]
+            # assert images_b.meta["pixdim"][1] == images_b.meta["pixdim"][2]
 
             assd_classes = assd(labels_b, pred_mask_b, n_classes, pixdim=images_b.meta["pixdim"][1])
             # if it == 0:
@@ -95,9 +95,9 @@ def train(train_loader, val_loader, fold, device, args, num_classes, len_train_d
         for it, (images_a, labels_a, images_b, labels_b) in enumerate(train_loader):
 
             # input data
-            images_a = images_a.to(device).detach()
-            images_b = images_b.to(device).detach()
-            labels_a = labels_a.to(device).detach()
+            images_a = images_a.to(device)
+            images_b = images_b.to(device)
+            labels_a = labels_a.to(device)
 
             # update model
             model.update(images_a, images_b, labels_a, loss_f_weight_value)
@@ -105,29 +105,27 @@ def train(train_loader, val_loader, fold, device, args, num_classes, len_train_d
             total_it += 1
             model.update_num_fake_inputs()
 
-
         model.update_lr(ep)
         
         saver.write_display(ep, model)
 
         # Save the best val model
-        validation(model, val_loader, saver, device, ep, num_classes)
+        if ep % 5 == 0:
+            validation(model, val_loader, saver, device, ep, num_classes)
   
 
 
 def main(args):
-    pl.seed_everything(args.seed)
-
+    set_seed(args.seed)
     labels, num_classes = get_labels(args.pred)
 
     # MMWHS Dataset
     if args.data_type == "MMWHS":
         dataset_type = MMWHS
         in_channels = 1
-    elif args.data_type == "RetinalVessel":
-        NotImplementedError
-        # dataset_type = Retinal_Vessel
-        # in_channels = 3
+    elif args.data_type == "chaos":
+        dataset_type = CHAOS
+        in_channels = 1
     else:
         raise ValueError(f"Data type {args.data_type} not supported")
 
@@ -139,6 +137,8 @@ def main(args):
     
     # for fold_train, fold_test_val in kf.split(cases):
     for fold_train_val, fold_test in kf.split(cases):
+        if fold == args.resume_f:
+            break
         save_dir = os.path.join(args.result_dir,  os.path.join(args.name, f'fold_{fold}'))
         os.makedirs(save_dir, exist_ok=True)
         log_dir = os.path.join(args.display_dir, os.path.join(args.name, f'fold_{fold}'))
@@ -146,10 +146,10 @@ def main(args):
         
         print("loading train data")
         dataset_train = dataset_type(args, labels, fold_train_val, fold_train_val)
-        train_loader = DataLoader(dataset_train, batch_size=args.bs, shuffle=True, num_workers=4)
+        train_loader = DataLoader(dataset_train, batch_size=args.bs, shuffle=True, num_workers=4, drop_last=True)
         print("loading val data")
         dataset_val = dataset_type(args, labels, fold_test, fold_test) 
-        val_loader = DataLoader(dataset_val, batch_size=1, num_workers=4)
+        val_loader = DataLoader(dataset_val, batch_size=1, num_workers=4, drop_last=True)
         len_train_data = dataset_train.__len__()
 
         train(train_loader, val_loader, fold, device, args, num_classes, len_train_data, in_channels) 
@@ -170,18 +170,19 @@ if __name__ == '__main__':
     parser.add_argument('--display_dir', type=str, default='../logs', help='path for saving display results')
     parser.add_argument('--result_dir', type=str, default='../results', help='path for saving result images and models')
     parser.add_argument('--img_save_freq', type=int, default=5, help='freq (epoch) of saving models')
+    parser.add_argument('--modality', type=str, default='CT', help='source modality')
+    parser.add_argument('--resume_f', default=1, type=int, help='fold from which to resume')
 
     # training related --> Aanpassen
     parser.add_argument('--pred', default='MYO', type=str,help='Prediction of which label') # MYO, LV, RV, MYO_RV, MYO_LV_RV
-    parser.add_argument('--modality', default="MRI", type=str, help='modality that is annotated - source domain') # or MRI
     parser.add_argument('--k_folds', default=5, type=int, help='Number of folds for K-Fold Cross-Validation')
     parser.add_argument('--epochs', default=100, type=int, help='Max number of epochs')
     parser.add_argument('--seed', default=42, type=int,help='Seed to use for reproducing results')
     parser.add_argument('--lr', default=0.0002, type=float, help='Learning rate')
     parser.add_argument('--lr67', default=0.001, type=float, help='Learning rate for the segmentor')
     parser.add_argument('--lr5', default=0.01, type=float, help='Learning rate for the zero_loss')   
-    parser.add_argument('--lr_A', default=10, type=float, help='Learning rate (lambda A)')
-    parser.add_argument('--lr_B', default=10, type=float, help='Learning rate (lambda B)')
+    parser.add_argument('--lr_A', default=10, type=float, help='Learning rate (lambda A)') 
+    parser.add_argument('--lr_B', default=10, type=float, help='Learning rate (lambda B)') 
     parser.add_argument('--bs', default=4, type=int,help='batch_size')
     parser.add_argument('--keep_rate', default=0.75, type=float, help='Keep rate for dropout')
     parser.add_argument('--resolution', default=256, type=int, help='Resolution of input images')

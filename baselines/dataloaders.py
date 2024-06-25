@@ -1,32 +1,23 @@
 import glob
 import os
-
-import torch
-
-from monai.transforms import (
-    LoadImage,
-    Compose,
-    MapLabelValue,
-    LoadImaged,
-    MapLabelValued, 
-    RandFlipd,
-    RandRotated
-)
-from torch.utils.data import Dataset
 import itertools
 
+from monai.transforms import (
+    Compose,
+    LoadImaged,
+    MapLabelValued
+)
+import numpy as np
+from torch.utils.data import Dataset
 
-class MMWHS_single(Dataset):
+
+class MMWHS(Dataset):
     def __init__(self, data_dir, fold, labels = [1, 0, 0, 0, 0, 0, 0]):
         self.data_dir = data_dir
         self.target_labels = labels
-        print(self.data_dir)
 
         self.all_images = sorted(glob.glob(os.path.join(self.data_dir, "images/case_10*")))
         self.all_labels = sorted(glob.glob(os.path.join(self.data_dir, "labels/case_10*")))
-
-        # print(self.all_images)
-        # print(self.all_labels)
 
         images = [glob.glob(self.all_images[idx]+ "/*.nii.gz") for idx in fold]
         self.imgs = sorted(list(itertools.chain.from_iterable(images)))
@@ -44,13 +35,7 @@ class MMWHS_single(Dataset):
         )
         self.data = [{"img": img, "seg": seg} for img, seg in zip(self.imgs, self.labs)] 
         
-
-
-
     def __getitem__(self, index):
-        # image = self.transform_img(self.imgs[index])
-        # label = self.transforms_seg(self.labs[index])
-
         data_point = self.transform_dict(self.data[index])
         image = data_point["img"]
         label = data_point["seg"]    
@@ -60,9 +45,9 @@ class MMWHS_single(Dataset):
         return self.dataset_size
     
 
-# TO IMPLEMENT
 class CHAOS(Dataset):
     def __init__(self, data_dir, fold, labels = [1, 0, 0, 0]):
+        np.random.seed(42)
         self.data_dir = data_dir
         self.target_labels = labels
         print("CHAOS dataset ", self.data_dir)
@@ -85,13 +70,18 @@ class CHAOS(Dataset):
         )
         self.data = [{"img": img, "seg": seg} for img, seg in zip(self.imgs, self.labs)] 
 
-
     def __getitem__(self, index):
+        # print(self.data)
+        print(self.data[index])
         data_point = self.transform_dict(self.data[index])
         
         image = data_point["img"]
         label = data_point["seg"]
-        return image.unsqueeze(0), label.unsqueeze(0)
+        if len(image.shape) == 2:
+            image = image.unsqueeze(0)
+        if len(label.shape) == 2:
+            label = label.unsqueeze(0)
+        return image, label
 
     def __len__(self):
         return self.dataset_size

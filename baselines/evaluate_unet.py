@@ -4,28 +4,25 @@ import argparse
 import sys
 import glob
 import pytorch_lightning as pl
-import random
 
 from torch.utils.data import DataLoader
-from data import MMWHS_single, CHAOS
-import torch.optim as optim
+from data import MMWHS, CHAOS
+
 import numpy as np
 
 from monai.networks.nets import UNet
 from sklearn.model_selection import KFold 
-from monai.losses import DiceLoss
-import torch.nn.functional as F
-
-from torch.utils.tensorboard import SummaryWriter
 from helpers import *
 import numpy as np
 
-def test(model_file, test_loader, n_classes, in_channels, device, model_type):
+from UNet import UNet_model
 
-    if model_type == "ResUnet":
+def test(model_file, test_loader, n_classes, device, model_type):
+
+    if model_type == "ResUNet":
         model = UNet(
             spatial_dims=2,
-            in_channels=in_channels,
+            in_channels=1,
             out_channels=n_classes,
             channels=(16, 32, 64, 128, 256),
             strides=(2, 2, 2, 2),
@@ -34,16 +31,16 @@ def test(model_file, test_loader, n_classes, in_channels, device, model_type):
     else:
         model = UNet_model(n_classes)
 
-    #init_weights_norm(model)
     model.to(device)
     print(f"Testing model {model_file}")
-    # Load the state dictionary
     model.load_state_dict(torch.load(model_file))
     model.eval()
 
     dice_classes_tot = np.zeros(n_classes)
     assd_classes_tot = np.zeros(n_classes)
-    true_dice_class = 0
+
+    # Skips images with only background
+    true_dice_class = 0 
 
     assd_len = len(test_loader)
     dsc_len = len(test_loader)
@@ -93,8 +90,7 @@ def main(args):
 
     # MMWHS Dataset
     if args.data_type == "MMWHS":
-        dataset_type = MMWHS_single
-        in_channels = 1
+        dataset_type = MMWHS
     elif args.data_type == "chaos":
         dataset_type = CHAOS
         in_channels = 1
@@ -117,13 +113,12 @@ def main(args):
         test_loader = DataLoader(dataset_test, batch_size=args.bs, num_workers=4)
         pretrained_filename = glob.glob(os.path.join(dir_checkpoint_fold, "*.pth"))
 
-        dice_classes, assd_classes, true_dice_class = test(pretrained_filename[0], test_loader, n_classes, in_channels, device, args.model)
+        dice_classes, assd_classes, true_dice_class = test(pretrained_filename[0], test_loader, n_classes, device, args.model)
         test_dice_classes.append(dice_classes)
         test_assd_classes.append(assd_classes)
         test_true_dice_class.append(true_dice_class)
         fold += 1
        
-    
     test_dice_classes = np.array(test_dice_classes)
     test_assd_classes = np.array(test_assd_classes)
     test_true_dice_class = np.array(test_true_dice_class)
@@ -159,27 +154,20 @@ if __name__ == '__main__':
     # Other hyperparameters
     parser.add_argument('--data_dir_test', default='../data/other/CT_withGT_proc/annotated', type=str,
                         help='Directory where to look for the data. For jobs on Lisa, this should be $TMPDIR.')
-    parser.add_argument('--seed', default=42, type=int,
-                        help='Seed to use for reproducing results')
+    parser.add_argument('--seed', default=42, type=int, help='Seed to use for reproducing results')
     
-    parser.add_argument('--bs', default=4, type=int,
-                        help='batch_size')
+    parser.add_argument('--bs', default=4, type=int, help='batch_size')
     
-    parser.add_argument('--data_type', default='MMWHS', type=str,
-                    help='Baseline used') 
+    parser.add_argument('--data_type', default='MMWHS', type=str, help='Baseline used') 
     
-    parser.add_argument('--name', default='trial', type=str,
-                    help='Baseline used') 
+    parser.add_argument('--name', default='trial', type=str, help='Baseline used') 
     
-    parser.add_argument('--pred', default='MYO', type=str,
-                        help='Prediction of which label') # MYO, LV, RV, MYO_RV, MYO_LV_RV    
+    parser.add_argument('--pred', default='MYO', type=str, help='Prediction of which label') # MYO, LV, RV, MYO_RV, MYO_LV_RV, Liver    
 
-    parser.add_argument('--model', default='ResUnet', type=str,
-                        help='ResUnet or Unet')
+    parser.add_argument('--model', default='ResUNet', type=str, help='ResUNet or UNet')
     
      # Add k-folds argument
     parser.add_argument('--k_folds', default=6, type=int, help='Number of folds for K-Fold Cross-Validation')
-
 
     argv = sys.argv[sys.argv.index("--") + 1:]
     args = parser.parse_args(argv)

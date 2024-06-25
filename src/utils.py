@@ -1,14 +1,13 @@
+from monai.metrics import DiceMetric, SurfaceDistanceMetric, HausdorffDistanceMetric
 import torch
-from monai.metrics import DiceMetric, SurfaceDistanceMetric
 import torch.nn.functional as F
 import numpy as np
 
-# evaluation functions heres
 
 def dice(labels, pred, n_class):
     # Initialize the DiceMetric object
+    # set reduction to 'none' to get the score for each class separately
     dice_metric = DiceMetric(reduction="mean_batch")
-
     compact_pred = torch.argmax(pred, dim=1).unsqueeze(1)
     compact_pred_oh = F.one_hot(compact_pred.long().squeeze(1), n_class).permute(0, 3, 1, 2)
 
@@ -32,7 +31,7 @@ def set_seed(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-def assd(labels, pred, n_class, pixdim):
+def assd(labels, pred, n_class, pix_dim):
     
     assd_metric = SurfaceDistanceMetric(reduction="mean_batch", symmetric=True)#_batch")
     # print(compact_pred.shape)
@@ -48,7 +47,8 @@ def assd(labels, pred, n_class, pixdim):
     metric = assd_metric.aggregate()
     assd_metric.reset()
 
-    return metric * pixdim 
+    return metric * pix_dim
+
 
 def get_labels(pred):
     # match case statement
@@ -62,11 +62,19 @@ def get_labels(pred):
         case "RV":
             labels = [0, 0, 0, 0, 1]
             n_classes = 2
-        case "Liver":
+        case "liver":
             labels = [1, 0, 0, 0]
             n_classes = 2
+        case "RK":
+            labels = [0, 1, 0, 0]
+            n_classes = 2
+        case "LK":
+            labels = [0, 0, 1, 0]
+            n_classes = 2
+        case "Spleen":
+            labels = [0, 0, 0, 1]
+            n_classes = 2
         case _:
-            labels = [1, 1, 1, 1, 1]
-            n_classes = 6
+            print("Class prediction not implemented yet")
     
     return labels, n_classes

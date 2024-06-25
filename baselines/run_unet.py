@@ -5,13 +5,14 @@ import sys
 import glob
 import pytorch_lightning as pl
 import random
+import numpy as np
+import torch.optim as optim
 
 from torch.utils.data import DataLoader
-from data import MMWHS_single, CHAOS
-import torch.optim as optim
-import numpy as np
+from dataloaders import MMWHS, CHAOS
 
-from monai.networks.nets import UNet
+from monai.networks.nets import UNet # ResUNet
+from UNet import UNet_model
 from sklearn.model_selection import KFold 
 from monai.losses import DiceLoss
 import torch.nn.functional as F
@@ -19,12 +20,12 @@ import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 from helpers import *
 
-def train(args, dir_checkpoint_fold, device, n_classes, train_loader, val_loader, in_channels=1):
+def train(args, dir_checkpoint_fold, device, n_classes, train_loader, val_loader):
     
-    if args.model == "ResUnet":
+    if args.model == "ResUNet":
         model = UNet(
             spatial_dims=2,
-            in_channels=in_channels,
+            in_channels=1,
             out_channels=n_classes,
             channels=(16, 32, 64, 128, 256),
             strides=(2, 2, 2, 2),
@@ -82,7 +83,7 @@ def train(args, dir_checkpoint_fold, device, n_classes, train_loader, val_loader
         if dice_tot > best_dice:
             best_dice = dice_tot
             existing_model_files = glob.glob(f"{dir_checkpoint_fold}/*.pth")
-            # Delete each found model file
+            # Delete the file previous best model
             for file_path in existing_model_files:
                 try:
                     os.remove(file_path)
@@ -94,12 +95,12 @@ def train(args, dir_checkpoint_fold, device, n_classes, train_loader, val_loader
             print(f"Saved best model with dice {dice_tot} at epoch {epoch}")
 
 
-def test(model_file, test_loader, n_classes, in_channels, device, model_type):
+def test(model_file, test_loader, n_classes, device, model_type):
 
-    if model_type == "ResUnet":
+    if model_type == "ResUNet":
         model = UNet(
             spatial_dims=2,
-            in_channels=in_channels,
+            in_channels=1,
             out_channels=n_classes,
             channels=(16, 32, 64, 128, 256),
             strides=(2, 2, 2, 2),
@@ -108,10 +109,8 @@ def test(model_file, test_loader, n_classes, in_channels, device, model_type):
     else:
         model = UNet_model(n_classes)
 
-    #init_weights_norm(model)
     model.to(device)
     print(f"Testing model {model_file}")
-    # Load the state dictionary
     model.load_state_dict(torch.load(model_file))
     model.eval()
 
@@ -124,7 +123,6 @@ def test(model_file, test_loader, n_classes, in_channels, device, model_type):
 
             outputs = model(image)
             dice_classes = dice(label, outputs, n_classes)
-            # dice_tot += dice_classes.item()
             dice_classes_tot += dice_classes
             dice_tot += np.mean(dice_classes)
 
@@ -135,85 +133,30 @@ def test(model_file, test_loader, n_classes, in_channels, device, model_type):
     return dice_tot, dice_classes_tot
 
 
-
-def k_fold_drit(args, dir_checkpoint, dataset_type, labels, device, n_classes, in_channels):
+def k_fold(args, dir_checkpoint, dataset_type, labels, device, n_classes):
     cases = range(0,20)
     kf = KFold(n_splits=args.k_folds, shuffle=True)
     fold = 0
-    test_dice_tot, test_dice_classes = [], []
 
     for fold_train, fold_test in kf.split(cases):
         print(f"Fold {fold}")
-        print(f"TRAINING ON CASES: ", fold_train)
         dir_checkpoint_fold = os.path.join(dir_checkpoint, f'fold_{fold}')            
         os.makedirs(dir_checkpoint_fold, exist_ok=True)
 
-        data_dir = os.path.join(args.data_dir, f"run_fold_{fold}")
+        if args.drit:
+            data_dir = os.path.join(args.data_dir, f"{args.data_type}_run_fold_{fold}")
+        else:
+            data_dir = args.data_dir
 
         random.shuffle(fold_train)
-        print("train_val: ", fold_train)
         fold_train2 = fold_train[:13]
-        print("train:", fold_train2)
         fold_val2 = fold_train[13:]
-        print("val: ", fold_val2)
         dataset_train = dataset_type(data_dir, fold_train2, labels)
         train_loader = DataLoader(dataset_train, batch_size=args.bs, shuffle=True, num_workers=4)
         dataset_val = dataset_type(data_dir, fold_val2, labels) 
         val_loader = DataLoader(dataset_val, batch_size=args.bs, num_workers=4)
 
-        train(args, dir_checkpoint_fold, device, n_classes, train_loader, val_loader, in_channels)
-
-        dataset_test = dataset_type(args.data_dir_test, fold_test, labels) 
-        test_loader = DataLoader(dataset_test, batch_size=args.bs, num_workers=4)
-        pretrained_filename = glob.glob(os.path.join(dir_checkpoint_fold, "*.pth"))
-
-        dice_tot, dice_classes_tot = test(pretrained_filename[0], test_loader, n_classes, in_channels, device, args.model)
-        
-        fold += 1
-        test_dice_tot.append(dice_tot)
-        test_dice_classes.append(dice_classes_tot)
-    
-
-    return np.array(test_dice_tot), np.array(test_dice_classes)
-
-
-def k_fold_normal(args, dir_checkpoint, dataset_type, labels, device, n_classes, in_channels):
-    cases = range(0,20)
-    kf = KFold(n_splits=args.k_folds, shuffle=True)
-    fold = 0
-    test_dice_tot, test_dice_classes = [], []
-
-    for fold_train, fold_test in kf.split(cases):
-        print(f"Fold {fold}")
-        print(f"TRAINING ON CASES: ", fold_train)
-        dir_checkpoint_fold = os.path.join(dir_checkpoint, f'fold_{fold}')            
-        os.makedirs(dir_checkpoint_fold, exist_ok=True)
-
-        random.shuffle(fold_train)
-        print("train_val: ", fold_train)
-        fold_train2 = fold_train[:13]
-        print("train:", fold_train2)
-        fold_val2 = fold_train[13:]
-        print("val: ", fold_val2)
-        dataset_train = dataset_type(args.data_dir, fold_train2, labels)
-        train_loader = DataLoader(dataset_train, batch_size=args.bs, shuffle=True, num_workers=4)
-        dataset_val = dataset_type(args.data_dir, fold_val2, labels) 
-        val_loader = DataLoader(dataset_val, batch_size=args.bs, num_workers=4)
-
-        train(args, dir_checkpoint_fold, device, n_classes, train_loader, val_loader, in_channels)
-
-        dataset_test = dataset_type(args.data_dir_test, fold_test, labels) 
-        test_loader = DataLoader(dataset_test, batch_size=args.bs, num_workers=4)
-        pretrained_filename = glob.glob(os.path.join(dir_checkpoint_fold, "*.pth"))
-
-        dice_tot, dice_classes_tot = test(pretrained_filename[0], test_loader, n_classes, in_channels, device, args.model)
-        fold += 1
-        test_dice_tot.append(dice_tot)
-        test_dice_classes.append(dice_classes_tot)
-    
-
-    return np.array(test_dice_tot), np.array(test_dice_classes)
-
+        train(args, dir_checkpoint_fold, device, n_classes, train_loader, val_loader)
 
 
 def main(args):
@@ -221,26 +164,22 @@ def main(args):
     pl.seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    filename = f'{args.name}_{args.pred}'    
+    filename = f'{args.model}_{args.name}_{args.pred}'    
     dir_checkpoint = os.path.join('checkpoints/', filename)
     os.makedirs(dir_checkpoint, exist_ok=True)
+    print(args.pred)
 
     labels, n_classes = get_labels(args.pred)
 
     # MMWHS Dataset
-    if args.data_type == "MMWHS":
-        dataset_type = MMWHS_single
-        in_channels = 1
+    if args.data_type == "mmwhs":
+        dataset_type = MMWHS
     elif args.data_type == "chaos":
         dataset_type = CHAOS
-        in_channels = 1
     else:
         raise ValueError(f"Data type {args.data_type} not supported")
     
-    if args.drit:
-        test_dice_tot, test_dice_classes = k_fold_drit(args, dir_checkpoint, dataset_type, labels, device, n_classes, in_channels)
-    else:
-        test_dice_tot, test_dice_classes = k_fold_normal(args, dir_checkpoint, dataset_type, labels, device, n_classes, in_channels)
+    test_dice_tot, test_dice_classes = k_fold(args, dir_checkpoint, dataset_type, labels, device, n_classes)
 
     print("Test results total: ", test_dice_tot)
     print(f"Mean test dice total: {np.mean(test_dice_tot)}")
@@ -251,44 +190,27 @@ def main(args):
         print(f"Mean test dice {item}: {np.mean(test_dice_classes[:, item])}")
         print(f"Std test dice {item}: {np.std(test_dice_classes[:, item])}")
 
-    
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a Unet model on the MM-WHS dataset')
 
     # Other hyperparameters
-    parser.add_argument('--data_dir', default='../data/other/CT_withGT_proc/annotated', type=str,
+    parser.add_argument('--data_dir', default='../data/other/CT_withGT_proc', type=str,
                         help='Directory where to look for the data. For jobs on Lisa, this should be $TMPDIR.')
     
-    parser.add_argument('--data_dir_test', default='../data/other/CT_withGT_proc/annotated', type=str,
+    parser.add_argument('--data_dir_test', default='../data/other/CT_withGT_proc', type=str,
                         help='Directory where to look for the data. For jobs on Lisa, this should be $TMPDIR.')
 
-    parser.add_argument('--epochs', default=10, type=int,
-                        help='Max number of epochs')
-    parser.add_argument('--seed', default=42, type=int,
-                        help='Seed to use for reproducing results')
-    
-    parser.add_argument('--lr', default=1e-3, type=float,
-                        help='Learning rate')
-    
-    parser.add_argument('--bs', default=4, type=int,
-                        help='batch_size')
-    
-    parser.add_argument('--data_type', default='MMWHS', type=str,
-                    help='Baseline used') 
-    
-    parser.add_argument('--name', default='trial', type=str,
-                    help='Baseline used') 
-    
+    parser.add_argument('--epochs', default=200, type=int, help='Max number of epochs')
+    parser.add_argument('--seed', default=42, type=int, help='Seed to use for reproducing results')
+    parser.add_argument('--lr', default=1e-3, type=float, help='Learning rate')
+    parser.add_argument('--bs', default=4, type=int,help='batch_size')
+    parser.add_argument('--data_type', default='mmwhs', type=str, help='Dataset types: mmwhs or chaos')
+    parser.add_argument('--name', default='trained_on_CT', type=str, help='Name of run') 
     parser.add_argument('--pred', default='MYO', type=str,
-                        help='Prediction of which label') # MYO, LV, RV, MYO_RV, MYO_LV_RV
-
-    parser.add_argument('--mode', default='train', type=str,
-                        help='train or test')
+                        help='Prediction of which label') # MYO, LV, RV, MYO_RV, MYO_LV_RV, Liver
     
-
-    parser.add_argument('--model', default='ResUnet', type=str,
-                        help='ResUnet or Unet')
+    parser.add_argument('--model', default='ResUNet', type=str,help='ResUNet or UNet')
     
     parser.add_argument('--drit', action='store_true')
     

@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import DataLoader
-from dataset import MMWHS_single
+from dataset import MMWHS_single, CHAOS_single
 from saver import Saver
 from model import DDFSeg
 import argparse
@@ -33,38 +33,54 @@ def test(save_dir, data_loader, device, num_classes):
     dice_class_tot = 0
     dice_bg_tot = 0
     assd_classes_tot = 0
+    assd_len = len(data_loader)
+    dsc_len = len(data_loader)
+    print(assd_len, dsc_len)
+    print("Pretrained model: ", model_file)
     for it, (images, labels) in enumerate(data_loader):
         with torch.no_grad():
-        # compute self.dice_b_mean --> with keep_rate = 1
             images = images.to(device)
             labels = labels.to(device) # one channel with different numbers
-            pred_mask_b = model.forward_eval(images) # multiple channel with softmax
-            dice_b_mean = dice(labels.cpu(), pred_mask_b.cpu(), model.num_classes)
-            assd_classes = assd(labels, pred_mask_b, num_classes, pixdim=images.meta["pixdim"][1])
-           
-        dice_class_tot += dice_b_mean.cpu().numpy()[1]
-        dice_bg_tot += dice_b_mean.cpu().numpy()[0]
-        assd_classes_tot += assd_classes.item()
-    
+            pred_mask_b = model.forward_test(images) # multiple channel with softmax
+            dice_b_mean = dice(labels.cpu(), pred_mask_b.cpu(), model.num_classes).numpy()
+            assd_classes = assd(labels.cpu(), pred_mask_b.cpu(), num_classes, pixdim=images.meta["pixdim"][1]).numpy()
 
-    assd_classes_tot /= len(data_loader)
-    dice_class_tot /= len(data_loader)
+            # skip when either label or pred is 0
+            if not np.isinf(assd_classes).any():
+                assd_classes_tot += assd_classes
+            else:
+                assd_len -= 1
+            
+            # Skip disce class when no label is there. Background is always there
+            if torch.all(labels==0):
+                dsc_len -= 1
+            else:
+                dice_class_tot += dice_b_mean[1]
+           
+        dice_bg_tot += dice_b_mean[0]
+    
+    if assd_len == 0:
+        assd_len = 1 # to avoid division by zero
+        print("assd_len is very very high because predicted mask is 0 everywhere!!!")
+    
+    print(assd_len, dsc_len)
+    assd_classes_tot /= assd_len
+    dice_class_tot /= dsc_len
     dice_bg_tot /= len(data_loader)
 
     return dice_class_tot, dice_bg_tot, assd_classes_tot
 
 
 def main(args):
+    set_seed(args.seed)
     labels, num_classes = get_labels(args.pred)
+    print("Prediction: ", args.pred)
 
     # MMWHS Dataset
     if args.data_type == "MMWHS":
         dataset_type = MMWHS_single
-        in_channels = 1
-    elif args.data_type == "RetinalVessel":
-        NotImplementedError
-        # dataset_type = Retinal_Vessel
-        # in_channels = 3
+    elif args.data_type == "chaos":
+        dataset_type = CHAOS_single
     else:
         raise ValueError(f"Data type {args.data_type} not supported")
 
@@ -77,13 +93,11 @@ def main(args):
     assd_scores = []
     # for fold_train, fold_test_val in kf.split(cases):
     for fold_train_val, fold_test in kf.split(cases):
-        save_dir = os.path.join(args.result_dir,  os.path.join(args.name, f'fold_{fold}'))
+        save_dir = os.path.join(args.resume, f'fold_{fold}')
         os.makedirs(save_dir, exist_ok=True)
-        log_dir = os.path.join(args.display_dir, os.path.join(args.name, f'fold_{fold}'))
-        os.makedirs(log_dir, exist_ok=True)
         
         print("loading test data")
-        dataset_test = dataset_type(args, labels, fold_test, fold_test) 
+        dataset_test = dataset_type(args.test_data_dir, fold_test, labels) 
         test_loader = DataLoader(dataset_test, batch_size=1, num_workers=4)
 
         dsc, dsc_bg, assd = test(save_dir, test_loader, device, num_classes)
@@ -91,7 +105,6 @@ def main(args):
         dsc_scores_BG.append(dsc_bg)
         assd_scores.append(assd)
 
-        
         fold += 1
     
     dsc_scores_BG = np.array(dsc_scores_BG)
@@ -132,10 +145,12 @@ if __name__ == '__main__':
     parser.add_argument('--lr5', default=0.01, type=float, help='Learning rate for the zero_loss')   
     parser.add_argument('--lr_A', default=10, type=float, help='Learning rate (lambda A)')
     parser.add_argument('--lr_B', default=10, type=float, help='Learning rate (lambda B)')
-    parser.add_argument('--bs', default=4, type=int,help='batch_size')
+    parser.add_argument('--bs', default=1, type=int,help='batch_size')
     parser.add_argument('--keep_rate', default=0.75, type=float, help='Keep rate for dropout')
     parser.add_argument('--resolution', default=256, type=int, help='Resolution of input images')
     parser.add_argument('--skip', default=True, type=bool, help='Skip connection in the generator')
+    parser.add_argument('--data_type', default="MMWHS", type=str, help='Type of data to use')
+    parser.add_argument('--k_folds', default=5, type=int, help='Number of folds for cross validation')
     
     argv = sys.argv[sys.argv.index("--") + 1:]
     args = parser.parse_args(argv)

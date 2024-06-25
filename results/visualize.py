@@ -2,29 +2,20 @@
 import numpy as np
 from monai.transforms import (
     Compose,
-    LoadImaged,
-    LoadImage,
-    ScaleIntensityd,
-    MapLabelValued,
     AsDiscrete
 )
-from monai.data import  decollate_batch
-
-from monai.data import Dataset, DataLoader
+from monai.data import DataLoader
 import os
-
 import matplotlib.pyplot as plt
 import glob
 import pytorch_lightning as pl
 import torch
 
-import torch
-
 from monai.networks.nets import UNet
-
 from baselines.UNet import UNet_model
 from baselines.dataloaders import MMWHS, CHAOS
 import sys
+import random
 
 sys.path.insert(0, 'src/')
 from src.models.crosscompcsd import CrossCSD
@@ -58,6 +49,7 @@ class ArgsDDF:
 
 
 def get_output_unet(image, model_name, device, unet=True):
+    # Load appropriate model
     if unet:
         model = UNet_model(2).to(device)
     else: 
@@ -70,9 +62,10 @@ def get_output_unet(image, model_name, device, unet=True):
             num_res_units=2,
         ).to(device)
     pretrained_model = glob.glob(os.path.join(model_name, "*.pth"))[0]
-    # Load the state dictionary
     model.load_state_dict(torch.load(pretrained_model))
     model.eval()
+
+    # Get predicted mask
     post_trans = Compose([AsDiscrete(argmax=True)])
     outputs = model.forward(image.to(device)).detach().cpu()
     vis_outputs = post_trans(outputs[0])
@@ -80,18 +73,22 @@ def get_output_unet(image, model_name, device, unet=True):
     return masked_output
 
 def get_output_pr(image, model_name, device):
+    # Load appropriate model
     args = Args()
     pretrained_model = glob.glob(os.path.join(model_name, "*.pth"))[0]
     model = CrossCSD(args, device, 1, 2, vMF_kappa=30, fold_nr=0)
     model.to(device)
     model.resume(pretrained_model)
     model.eval()
+
+     # Get predicted mask
     com_features_t, compact_pred_t = model.forward_test(image)
     compact_pred_t = compact_pred_t.detach().cpu()
     masked_output = np.ma.masked_where(compact_pred_t[0, 0, :, :] == 0, compact_pred_t[0, 0, :, :])
     return masked_output
 
 def get_output_vmfnet(image, model_name, device):
+    # Load appropriate model
     pretrained_model = glob.glob(os.path.join(model_name, "*.pth"))[0]
     model = CompCSD(device, 1, 8, 12, num_classes=2, z_length=8, vMF_kappa=30, init='xavier')
     model.initialize(pretrained_model, init="xavier") # Does not matter for testing
@@ -99,13 +96,14 @@ def get_output_vmfnet(image, model_name, device):
     model.resume(pretrained_model)
     model.eval()
 
+    # Get predicted mask
     rec, pre_seg, features, kernels, L_visuals = model(image)
-   
     compact_pred = torch.argmax(pre_seg, dim=1).unsqueeze(1).detach().cpu()
     masked_output = np.ma.masked_where(compact_pred[0, 0, :, :] == 0, compact_pred[0, 0, :, :])
     return masked_output
 
 def get_output_ddfseg(image, model_name, device):
+    # Load appropriate model
     pretrained_model = glob.glob(os.path.join(model_name, "*.pth"))[0]
     args = ArgsDDF()
     model = DDFSeg(args, num_classes=2)
@@ -113,8 +111,8 @@ def get_output_ddfseg(image, model_name, device):
     model.resume(pretrained_model)
     model.eval()
 
+    # Get predicted mask
     pred_mask = model.forward_test(torch.cat((image, image, image), dim=1))
-   
     compact_pred = torch.argmax(pred_mask, dim=1).unsqueeze(1).detach().cpu()
     masked_output = np.ma.masked_where(compact_pred[0, 0, :, :] == 0, compact_pred[0, 0, :, :])
     return masked_output
@@ -173,55 +171,40 @@ def show_results(device, data_dir, paths, test_cases_fold_0, i1, i2, i3, source,
         dataset_test = CHAOS(data_dir, test_cases_fold_0, labels) 
         cmap_col='Wistia'
     
-    test_loader = DataLoader(dataset_test, batch_size=1, num_workers=4)
+    test_loader = DataLoader(dataset_test, batch_size=1)
     for i, (im, lab) in enumerate(test_loader):
         if i == i1:
             image1 = im.to(device)
             gt1 = lab
-            # output_FS_1 = get_output_unet(image1, paths["name_FS"], device)
-            # output_NA_1 = get_output_unet(image1, paths["name_NA"], device)
-            # output_DU_1 = get_output_unet(image1, paths["name_DU"], device)
-            # output_DR_1 = get_output_unet(image1, paths["name_DR"], device, False)
-            # output_VM_1 = get_output_vmfnet(image1, paths["name_VMFNET"], device)
+            output_FS_1 = get_output_unet(image1, paths["name_FS"], device)
+            output_NA_1 = get_output_unet(image1, paths["name_NA"], device)
+            output_DU_1 = get_output_unet(image1, paths["name_DU"], device)
+            output_DR_1 = get_output_unet(image1, paths["name_DR"], device, False)
+            output_VM_1 = get_output_vmfnet(image1, paths["name_VMFNET"], device)
             output_PR_1 = get_output_pr(image1, paths["name_PR"], device)
-            output_DDF_1 = output_PR_1 # get_output_ddfseg(image1, paths["name_DDF"], device)
-            output_FS_1 = output_PR_1#get_output_unet(image1, paths["name_FS"], device)
-            output_NA_1 = output_PR_1#get_output_unet(image1, paths["name_NA"], device)
-            output_DU_1 = output_PR_1#get_output_unet(image1, paths["name_DU"], device)
-            output_DR_1 = output_PR_1#get_output_unet(image1, paths["name_DR"], device, False)
-            output_VM_1 = output_PR_1 #get_output_vmfnet(image1, paths["name_VMFNET"], device)
+            output_DDF_1 = get_output_ddfseg(image1, paths["name_DDF"], device)
         
         if i == i2:
             image2 = im.to(device)
             gt2 = lab
-            # output_FS_2 = get_output_unet(image2, paths["name_FS"], device)
-            # output_NA_2 = get_output_unet(image2, paths["name_NA"], device)
-            # output_DU_2 = get_output_unet(image2, paths["name_DU"], device)
-            # output_DR_2 = get_output_unet(image2, paths["name_DR"], device, False)
-            # output_VM_2 = get_output_vmfnet(image2, paths["name_VMFNET"], device)
+            output_FS_2 = get_output_unet(image2, paths["name_FS"], device)
+            output_NA_2 = get_output_unet(image2, paths["name_NA"], device)
+            output_DU_2 = get_output_unet(image2, paths["name_DU"], device)
+            output_DR_2 = get_output_unet(image2, paths["name_DR"], device, False)
+            output_VM_2 = get_output_vmfnet(image2, paths["name_VMFNET"], device)
             output_PR_2 = get_output_pr(image2, paths["name_PR"], device)
-            output_DDF_2 = output_PR_2 # get_output_ddfseg(image2, paths["name_DDF"], device)
-            output_FS_2 =output_PR_2
-            output_NA_2 = output_PR_2 #get_output_unet(image2, paths["name_NA"], device)
-            output_DU_2 = output_PR_2 #get_output_unet(image2, paths["name_DU"], device)
-            output_DR_2 = output_PR_2 #get_output_unet(image2, paths["name_DR"], device, False)
-            output_VM_2 = output_PR_2 #get_output_vmfnet(image2, paths["name_VMFNET"], device)
+            output_DDF_2 = get_output_ddfseg(image2, paths["name_DDF"], device)
         
         if i == i3:
             image3 = im.to(device)
             gt3 = lab
-            # output_FS_3 = get_output_unet(image3, paths["name_FS"], device)
-            # output_NA_3 = get_output_unet(image3, paths["name_NA"], device)
-            # output_DU_3 = get_output_unet(image3, paths["name_DU"], device)
-            # output_DR_3 = get_output_unet(image3, paths["name_DR"], device, False)
-            # output_VM_3 = get_output_vmfnet(image3, paths["name_VMFNET"], device)
+            output_FS_3 = get_output_unet(image3, paths["name_FS"], device)
+            output_NA_3 = get_output_unet(image3, paths["name_NA"], device)
+            output_DU_3 = get_output_unet(image3, paths["name_DU"], device)
+            output_DR_3 = get_output_unet(image3, paths["name_DR"], device, False)
+            output_VM_3 = get_output_vmfnet(image3, paths["name_VMFNET"], device)
+            output_DDF_3 = get_output_ddfseg(image3, paths["name_DDF"], device)
             output_PR_3 = get_output_pr(image3, paths["name_PR"], device)
-            output_DDF_3 = output_PR_3 # get_output_ddfseg(image3, paths["name_DDF"], device)
-            output_FS_3 = output_PR_3 #get_output_unet(image3, paths["name_FS"], device)
-            output_NA_3 = output_PR_3 #get_output_unet(image3, paths["name_NA"], device)
-            output_DU_3 = output_PR_3 #get_output_unet(image3, paths["name_DU"], device)
-            output_DR_3 = output_PR_3 #get_output_unet(image3, paths["name_DR"], device, False)
-            output_VM_3 = output_PR_3 #get_output_vmfnet(image3, paths["name_VMFNET"], device)
 
     masked_gt1 = np.ma.masked_where(gt1[0, 0, :, :] == 0, gt1[0, 0, :, :])
     masked_gt2 = np.ma.masked_where(gt2[0, 0, :, :] == 0, gt2[0, 0, :, :])
@@ -238,37 +221,6 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(device)
 
-    test_cases_fold_0 = [0, 1, 15, 17]
-
-    # data_dir = "data/other/CT_withGT_proc"
-    # paths_MYO_CT = {
-    #     "name_FS": "baselines/checkpoints/UNet_trained_on_CT_MYO/fold_0/",
-    #     "name_NA": "baselines/checkpoints/UNet_trained_on_MRI_MYO/fold_0/",
-    #     "name_DU": "baselines/checkpoints/UNet_trained_on_fake_CT_MYO/fold_0/",
-    #     "name_DR": "baselines/checkpoints/ResUNet_trained_on_fake_CT_MYO/fold_0/",
-    #     "name_VMFNET": "baselines/vMFNet/checkpoints/single_MRI_MYO/fold_0/",
-    #     "name_PR": "src/checkpoints/proposed_MYO/xavier_init_true_opt_10_newmetric/fold_0/",
-    #     "name_DDF": "baselines/DDFSeg/results/MYO_MMWHS/fold_0/"
-    # }
-    # i1 = 4
-    # i2 = 40 
-    # i3 = 100
-    # show_results(device, data_dir, paths_MYO_CT, test_cases_fold_0, i1, i2, i3, source="MRI", target="CT", label="MYO")
-
-    # paths_LV_CT = {
-    #     "name_FS": "baselines/checkpoints/UNet_trained_on_CT_LV/fold_0/",
-    #     "name_NA": "baselines/checkpoints/UNet_trained_on_MRI_LV/fold_0/",
-    #     "name_DU": "baselines/checkpoints/UNet_trained_on_fake_CT_LV/fold_0/",
-    #     "name_DR": "baselines/checkpoints/ResUNet_trained_on_fake_CT_LV/fold_0/",
-    #     "name_VMFNET": "baselines/vMFNet/checkpoints/single_MRI_LV/fold_0/",
-    #     "name_PR": "src/checkpoints/proposed_LV/xavier_init_true_opt_10_newmetric/fold_0/",
-    #     "name_DDF": "baselines/DDFSeg/results/LV_MMWHS/fold_0/"
-    # }
-    # i1 = 9
-    # i2 = 60
-    # i3 = 100
-    # show_results(device, data_dir, paths_LV_CT, test_cases_fold_0, i1, i2, i3, source="MRI", target="CT", label="LV")
-
     # paths_RV_CT = {
     #     "name_FS": "baselines/checkpoints/UNet_trained_on_CT_RV/fold_0/",
     #     "name_NA": "baselines/checkpoints/UNet_trained_on_MRI_RV/fold_0/",
@@ -281,7 +233,10 @@ def main():
     # i1 = 1 
     # i2 = 15
     # i3 = 100
-    # show_results(device, data_dir, paths_RV_CT, test_cases_fold_0, i1, i2, i3, source="MRI", target="CT", label="RV")
+    # data_3 = show_results(device, data_dir, paths_RV_CT, test_cases_fold_0, i1, i2, i3, source="MRI", target="CT", label="RV")
+
+    # tiles = ["Input Image", "UNet (NA)","vMFNet", "DDFSeg", "DRIT + UNet", "DRIT + RUNet", "Proposed", "UNet (FS)", "Ground Truth"]
+    # visualize_baselines(tiles, data_1, data_2, data_3, source="MRI", target="CT", label="MYO_LV_RV", cmap_col='spring')
 
 
     # data_dir = "data/other/MR_withGT_proc"
@@ -297,7 +252,7 @@ def main():
     # i1 = 4
     # i2 = 40
     # i3 = 100
-    # show_results(device, data_dir, paths_MYO_MRI, test_cases_fold_0, i1, i2, i3, source="CT", target="MRI", label="MYO")
+    # data_1 = show_results(device, data_dir, paths_MYO_MRI, test_cases_fold_0, i1, i2, i3, source="CT", target="MRI", label="MYO")
     
     # paths_LV_MRI = {
     #     "name_NA": "baselines/checkpoints/UNet_trained_on_CT_LV/fold_0/",
@@ -308,10 +263,10 @@ def main():
     #     "name_PR": "src/checkpoints/proposed_LV/xavier_init_true_opt_10_newmetric_TMRI/fold_0/",
     #     "name_DDF": "baselines/DDFSeg/results/LV_MMWHS2/fold_0/"
     # }
-    # i1 = 9 
+    # i1 = 9 # 9 
     # i2 = 46
     # i3 = 100
-    # show_results(device, data_dir, paths_LV_MRI, test_cases_fold_0, i1, i2, i3, source="CT", target="MRI", label="LV")
+    # data_2 = show_results(device, data_dir, paths_LV_MRI, test_cases_fold_0, i1, i2, i3, source="CT", target="MRI", label="LV")
 
 
     # paths_RV_MRI = {
@@ -323,44 +278,30 @@ def main():
     #     "name_PR": "src/checkpoints/proposed_RV/xavier_init_true_opt_10_newmetric_TMRI/fold_0/",
     #     "name_DDF": "baselines/DDFSeg/results/RV_MMWHS2/fold_0/"
     # }
-    # i1 = 35
+    # i1 = 60 # 35
     # i2 = 60 # 60
     # i3 = 100
-    # show_results(device, data_dir, paths_RV_MRI, test_cases_fold_0, i1, i2, i3, source="CT", target="MRI", label="RV")
-
-    test_cases_fold_4 = [6, 7, 10, 14]
-
+    # data_3 = show_results(device, data_dir, paths_RV_MRI, test_cases_fold_0, i1, i2, i3, source="CT", target="MRI", label="RV")
+    # tiles = ["Input Image", "UNet (NA)","vMFNet", "DDFSeg", "DRIT + UNet", "DRIT + RUNet", "Proposed", "UNet (FS)", "Ground Truth"]
+    # visualize_baselines(tiles, data_1, data_2, data_3, source="CT", target="MRI", label="MYO_LV_RV", cmap_col='spring')
+    
+    test_cases_fold_2 = [2, 13, 16, 18]
 
     data_dir = "data/preprocessed_chaos/T1"
     paths_liver_T1 = {
-        "name_NA": "baselines/checkpoints/UNet_trained_on_T2_Liver/fold_4/",
-        "name_FS": "baselines/checkpoints/UNet_trained_on_T1_Liver/fold_4/",
-        "name_DU": "baselines/checkpoints/UNet_trained_on_fake_T1_Liver/fold_4/",
-        "name_DR": "baselines/checkpoints/ResUNet_trained_on_fake_T1_Liver/fold_4/",
-        "name_VMFNET": "baselines/vMFNet/checkpoints/single_T2_liver/fold_4/",
-        "name_PR": "src/checkpoints/proposed_liver/TargetT1/xavier_init_true_opt_10_newmetric/fold_4/",
-        "name_DDF": "baselines/DDFSeg/results/Liver_CHAOS_T1/fold_4/"
+        "name_NA": "baselines/checkpoints/UNet_trained_on_T2_Liver/fold_2/",
+        "name_FS": "baselines/checkpoints/UNet_trained_on_T1_Liver/fold_2/",
+        "name_DU": "baselines/checkpoints/UNet_trained_on_fake_T1_Liver/fold_2/",
+        "name_DR": "baselines/checkpoints/ResUNet_trained_on_fake_T1_Liver/fold_2/",
+        "name_VMFNET": "baselines/vMFNet/checkpoints/single_T2_liver/fold_2/",
+        "name_PR": "src/checkpoints/proposed_liver/TargetT1/xavier_init_true_opt_10_newmetric/fold_2/",
+        "name_DDF": "baselines/DDFSeg/results/Liver_CHAOS_T1/fold_2/"
     }
-    i1 = 1
-    i2 = 2
-    i3 = 3
-    show_results(device, data_dir, paths_liver_T1, test_cases_fold_4, i1, i2, i3, source="T2", target="T1", label="Liver")
+    i1 = random.randrange()
+    i2 = 1
+    i3 = 2
+    show_results(device, data_dir, paths_liver_T1, test_cases_fold_2, i1, i2, i3, source="T2", target="T1", label="Liver")
 
-
-    data_dir = "data/preprocessed_chaos/T2"
-    paths_liver_T2 = {
-        "name_NA": "baselines/checkpoints/UNet_trained_on_T1_Liver/fold_4/",
-        "name_FS": "baselines/checkpoints/UNet_trained_on_T2_Liver/fold_4/",
-        "name_DU": "baselines/checkpoints/UNet_trained_on_fake_T2_Liver/fold_4/",
-        "name_DR": "baselines/checkpoints/ResUNet_trained_on_fake_T2_Liver/fold_4/",
-        "name_VMFNET": "baselines/vMFNet/checkpoints/single_T1_liver/fold_4/",
-        "name_PR": "src/checkpoints/proposed_liver/TargetT2/xavier_init_true_opt_10_newmetric/fold_4/",
-        "name_DDF": "baselines/DDFSeg/results/Liver_CHAOS_T1/fold_4/"
-    }
-    i1 = 1
-    i2 = 2
-    i3 = 3 # 65
-    show_results(device, data_dir, paths_liver_T2, test_cases_fold_4, i1, i2, i3, source="T1", target="T2", label="Liver")
 
 if __name__ == '__main__':
     main()

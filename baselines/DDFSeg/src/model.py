@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from losses import *
+from losses_ddf import DiscriminatorLossDouble, DiscriminatorLoss, ZeroLoss, SegmentationLoss, GeneratorLoss, SegmentationLossTarget
 from networks import *
 import random
 from torch.optim import lr_scheduler
@@ -180,6 +180,13 @@ class DDFSeg(nn.Module):
         self.d_F_loss_item = 0
         self.dif_loss_item = 0
         
+    def forward_test(self, images_b):
+        latent_tmpb = self.encoder_C_AB(images_b)
+        latent_b = self.encoder_C_B(latent_tmpb)
+        pred_mask = self.segmenter(latent_b) 
+        return pred_mask
+
+
     def forward_eval(self, images_a, images_b):
         latent_tmpb = self.encoder_C_AB(images_b)
         latent_b = self.encoder_C_B(latent_tmpb)
@@ -190,19 +197,13 @@ class DDFSeg(nn.Module):
         latent_a = self.encoder_C_A(latent_tmpa)
         latent_b_diff = self.encoder_D_B(images_b)
 
-        # couple style from B and content from A to create fake image
+       
         fake_images_tmp_b = self.decoder_AB(torch.cat((latent_a, latent_b_diff), dim=1))
         fake_images_b = self.decoder_B(fake_images_tmp_b, images_a[:, 1, :, :].unsqueeze(1))
-        # fake_images_b = self.decoder_B(fake_images_tmp_b, images_a)
 
 
         # Find content from fake image
-        if self.im_channels == 1:
-            latent_fake_btmp = self.encoder_C_AB(torch.cat((fake_images_b, fake_images_b, fake_images_b), dim=1))
-        else:
-            latent_fake_btmp = self.encoder_C_AB(fake_images_b)
-
-        # latent_fake_btmp = self.encoder_C_AB(fake_images_b)
+        latent_fake_btmp = self.encoder_C_AB(torch.cat((fake_images_b, fake_images_b, fake_images_b), dim=1))
         latent_fake_b = self.encoder_C_B(latent_fake_btmp)
 
         pred_mask_fake = self.segmenter(latent_fake_b)
@@ -235,17 +236,11 @@ class DDFSeg(nn.Module):
 
         # Cross cycle
 
-        if self.im_channels == 1:
-            latent_fake_btmp = self.encoder_C_AB(torch.cat((fake_images_b, fake_images_b, fake_images_b), dim=1))
-            latent_fake_atmp = self.encoder_C_AB(torch.cat((fake_images_a, fake_images_a, fake_images_a), dim=1))
-            latent_fa_diff = self.encoder_D_A(torch.cat((fake_images_a, fake_images_a, fake_images_a), dim=1))
-            latent_fb_diff = self.encoder_D_B(torch.cat((fake_images_b, fake_images_b, fake_images_b), dim=1))
-        else:
-            latent_fake_btmp = self.encoder_C_AB(fake_images_b)
-            latent_fake_atmp = self.encoder_C_AB(fake_images_a)
-            latent_fa_diff = self.encoder_D_A(fake_images_a)
-            latent_fb_diff = self.encoder_D_B(fake_images_b)
-        
+        latent_fake_btmp = self.encoder_C_AB(torch.cat((fake_images_b, fake_images_b, fake_images_b), dim=1))
+        latent_fake_atmp = self.encoder_C_AB(torch.cat((fake_images_a, fake_images_a, fake_images_a), dim=1))
+        latent_fa_diff = self.encoder_D_A(torch.cat((fake_images_a, fake_images_a, fake_images_a), dim=1))
+        latent_fb_diff = self.encoder_D_B(torch.cat((fake_images_b, fake_images_b, fake_images_b), dim=1))
+    
 
         latent_fake_a = self.encoder_C_A(latent_fake_atmp)
         latent_fake_b = self.encoder_C_B(latent_fake_btmp)
@@ -266,7 +261,6 @@ class DDFSeg(nn.Module):
         prob_fake_a_is_real, _ = self.discriminator_A(forward_GA_res["fake_images_a"])
         
         prob_real_b_is_real = self.discriminator_B(images_b[:, 1, :, :].unsqueeze(1).detach())
-        # prob_real_b_is_real = self.discriminator_B(images_b.detach())
 
         fake_pool_b = self.fake_image_pool_B(forward_GA_res["fake_images_b"].detach())
 
@@ -289,7 +283,7 @@ class DDFSeg(nn.Module):
         prob_cycle_a_is_real, prob_cycle_a_aux_is_real = self.discriminator_A(forward_GB_res["cycle_images_a"].detach())
         prob_fake_b_is_real = self.discriminator_B(forward_GB_res["fake_images_b"])
 
-        fake_pool_a = self.fake_image_pool_A(forward_GB_res["fake_images_b"].detach())
+        fake_pool_a = self.fake_image_pool_A(forward_GB_res["fake_images_a"].detach())
         prob_fake_pool_a_is_real, prob_fake_pool_a_aux_is_real = self.discriminator_A(fake_pool_a.detach())
 
         return {
@@ -305,7 +299,6 @@ class DDFSeg(nn.Module):
     def update_GA_DB(self, images_a, images_b):
         res = self.forward_GA_DB(images_a, images_b)
         loss_gA = self.g_loss_A(res["prob_fake_a_is_real"], images_a[:, 1, :, :].unsqueeze(1).detach(), images_b[:, 1, :, :].unsqueeze(1).detach(), res["cycle_images_a"], res["cycle_images_b"])
-        # loss_gA = self.g_loss_A(res["prob_fake_a_is_real"], images_a.detach(), images_b.detach(), res["cycle_images_a"], res["cycle_images_b"])
         
         loss_dB = self.d_B_loss(res["prob_real_b_is_real"], res["prob_fake_pool_b_is_real"])
 
@@ -327,7 +320,6 @@ class DDFSeg(nn.Module):
         res = self.forward_GB_DA(images_a, images_b)
 
         loss_gB = self.g_loss_B(res["prob_fake_b_is_real"], images_a[:, 1, :, :].unsqueeze(1).detach(), images_b[:, 1, :, :].unsqueeze(1).detach(), res["cycle_images_a"], res["cycle_images_b"])
-        # loss_gB = self.g_loss_B(res["prob_fake_b_is_real"], images_a.detach(), images_b.detach(), res["cycle_images_a"], res["cycle_images_b"])
         
         loss_dA = self.d_A_loss(res["prob_real_a_is_real"], res["prob_fake_pool_a_is_real"], res["prob_cycle_a_aux_is_real"], res["prob_fake_pool_a_aux_is_real"])
     
@@ -360,8 +352,7 @@ class DDFSeg(nn.Module):
         fake_images_tmp_a = self.decoder_AB(torch.cat((latent_b, latent_a_diff), dim=1))
         fake_images_b = self.decoder_B(fake_images_tmp_b, images_a[:, 1, :, :].unsqueeze(1))
         fake_images_a = self.decoder_A(fake_images_tmp_a, images_b[:, 1, :, :].unsqueeze(1))
-        # fake_images_b = self.decoder_B(fake_images_tmp_b, images_a)
-        # fake_images_a = self.decoder_A(fake_images_tmp_a, images_b)
+
 
         # Cross cycle
 
@@ -512,16 +503,13 @@ class DDFSeg(nn.Module):
         fake_images_tmp_a = self.decoder_AB(torch.cat((latent_b, latent_a_diff), dim=1))
         fake_images_b = self.decoder_B(fake_images_tmp_b, images_a[:, 1, :, :].unsqueeze(1))
         fake_images_a = self.decoder_A(fake_images_tmp_a, images_b[:, 1, :, :].unsqueeze(1))
-        # fake_images_b = self.decoder_B(fake_images_tmp_b, images_a)
-        # fake_images_a = self.decoder_A(fake_images_tmp_a, images_b)
+
 
         # Cross cycle
         # print("cross cycle forward pass")
 
         FA_separate_B = self.encoder_D_B(torch.cat((fake_images_a, fake_images_a, fake_images_a), dim=1))
         FB_separate_A = self.encoder_D_A(torch.cat((fake_images_b, fake_images_b, fake_images_b), dim=1))
-        # FA_separate_B = self.encoder_D_B(fake_images_a)
-        # FB_separate_A = self.encoder_D_A(fake_images_b)
         
 
         return {
