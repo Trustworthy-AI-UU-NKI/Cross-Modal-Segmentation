@@ -14,11 +14,11 @@ from monai.networks.nets import UNet
 from sklearn.model_selection import KFold 
 from helpers import *
 import numpy as np
-
 from UNet import UNet_model
 
 def test(model_file, test_loader, n_classes, device, model_type):
 
+    # Get UNet or ResUNet
     if model_type == "ResUNet":
         model = UNet(
             spatial_dims=2,
@@ -31,6 +31,7 @@ def test(model_file, test_loader, n_classes, device, model_type):
     else:
         model = UNet_model(n_classes)
 
+    # Load trained model
     model.to(device)
     print(f"Testing model {model_file}")
     model.load_state_dict(torch.load(model_file))
@@ -41,7 +42,6 @@ def test(model_file, test_loader, n_classes, device, model_type):
 
     # Skips images with only background
     true_dice_class = 0 
-
     assd_len = len(test_loader)
     dsc_len = len(test_loader)
     
@@ -51,9 +51,11 @@ def test(model_file, test_loader, n_classes, device, model_type):
             image = image.to(device)
             label = label.to(device)
 
+            # Forward pass for testing
             outputs = model(image)
+
+            # COmpute test metrics
             dice_classes = dice(label, outputs, n_classes)
-            
             assd_classes = assd(label, outputs, n_classes, pixdim=image.meta["pixdim"][1])
 
             # skip when either label or pred is 0
@@ -78,7 +80,6 @@ def test(model_file, test_loader, n_classes, device, model_type):
 
 
 def main(args):
-
     pl.seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -88,12 +89,11 @@ def main(args):
 
     labels, n_classes = get_labels(args.pred)
 
-    # MMWHS Dataset
+    # Get Dataset
     if args.data_type == "MMWHS":
         dataset_type = MMWHS
-    elif args.data_type == "chaos":
+    elif args.data_type == "CHAOS":
         dataset_type = CHAOS
-        in_channels = 1
     else:
         raise ValueError(f"Data type {args.data_type} not supported")
     
@@ -102,17 +102,19 @@ def main(args):
     fold = 0
     test_dice_classes, test_assd_classes, test_true_dice_class = [], [], []
 
+    # Test each model for all folds
     for fold_train, fold_test in kf.split(cases):
-        
+
         print(f"Fold {fold}")
-        print(f"TRAINING ON CASES: ", fold_train)
         dir_checkpoint_fold = os.path.join(dir_checkpoint, f'fold_{fold}')            
         os.makedirs(dir_checkpoint_fold, exist_ok=True)
 
+        # Get dataset and pretrained file name
         dataset_test = dataset_type(args.data_dir_test, fold_test, labels) 
         test_loader = DataLoader(dataset_test, batch_size=args.bs, num_workers=4)
         pretrained_filename = glob.glob(os.path.join(dir_checkpoint_fold, "*.pth"))
 
+        # Test
         dice_classes, assd_classes, true_dice_class = test(pretrained_filename[0], test_loader, n_classes, device, args.model)
         test_dice_classes.append(dice_classes)
         test_assd_classes.append(assd_classes)
@@ -132,7 +134,6 @@ def main(args):
         print(f"Mean test dice {item}: {np.mean(test_dice_classes[:, item])}")
         print(f"Std test dice {item}: {np.std(test_dice_classes[:, item])}")
 
-    assert (test_assd_classes[:, 0] == test_assd_classes[:, 1]).all()
     
     # ASSD is not computed for the background
     for item in range(1, n_classes):
@@ -141,6 +142,7 @@ def main(args):
         print(f"Mean test dice {item}: {np.mean(test_assd_classes[:, item])}")
         print(f"Std test dice {item}: {np.std(test_assd_classes[:, item])}")
     
+    # DSC with correction for when label is all zero
     print(f"True DSC RESULTS")
     print(f"All test results: ", test_true_dice_class)
     print(f"Mean test dice: {np.mean(test_true_dice_class)}")
@@ -156,7 +158,7 @@ if __name__ == '__main__':
                         help='Directory where to look for the data. For jobs on Lisa, this should be $TMPDIR.')
     parser.add_argument('--seed', default=42, type=int, help='Seed to use for reproducing results')
     
-    parser.add_argument('--bs', default=4, type=int, help='batch_size')
+    parser.add_argument('--bs', default=1, type=int, help='batch_size')
     
     parser.add_argument('--data_type', default='MMWHS', type=str, help='Baseline used') 
     
@@ -167,7 +169,7 @@ if __name__ == '__main__':
     parser.add_argument('--model', default='ResUNet', type=str, help='ResUNet or UNet')
     
      # Add k-folds argument
-    parser.add_argument('--k_folds', default=6, type=int, help='Number of folds for K-Fold Cross-Validation')
+    parser.add_argument('--k_folds', default=5, type=int, help='Number of folds for K-Fold Cross-Validation')
 
     argv = sys.argv[sys.argv.index("--") + 1:]
     args = parser.parse_args(argv)

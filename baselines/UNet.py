@@ -1,10 +1,11 @@
-# This code is directly taken from https://github.com/vios-s/vMFNet
+# This code is taken from https://github.com/vios-s/vMFNet
+# Copyright (c) 2022 vios-s
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-###################################### maybe delete some skips
+
 class UNet_model(nn.Module):
     def __init__(self, n_classes, norm="Batch", n_channels=1, bilinear=True):
         super(UNet_model, self).__init__()
@@ -12,17 +13,17 @@ class UNet_model(nn.Module):
         self.n_classes = n_classes
         self.bilinear = bilinear
 
-        self.inc = DoubleConv(n_channels, 64, norm=norm) #64x288x288 x1
+        self.inc = DoubleConv(n_channels, 64, norm=norm) 
 
-        self.down1 = Down(64, 128)  #128x144x144 x2
-        self.down2 = Down(128, 256) #256x72x72 x3
-        self.down3 = Down(256, 512) #512x36x36 x4
+        self.down1 = Down(64, 128)
+        self.down2 = Down(128, 256)
+        self.down3 = Down(256, 512) 
         factor = 2 if bilinear else 1
-        self.down4 = Down(512, 1024 // factor) #512x18x18 x5
-        self.up1 = Up(1024, 512 // factor, norm=norm, bilinear=bilinear) #256x36x36 y1
-        self.up2 = Up(512, 256 // factor, norm=norm, bilinear=bilinear) #128x72x72 y2
-        self.up3 = Up(256, 128 // factor, norm=norm, bilinear=bilinear) #64x144x144 y3
-        self.up4 = Up(128, 64, norm=norm, bilinear=bilinear) #64x288x288 y4
+        self.down4 = Down(512, 1024 // factor) 
+        self.up1 = Up(1024, 512 // factor, norm=norm, bilinear=bilinear)
+        self.up2 = Up(512, 256 // factor, norm=norm, bilinear=bilinear)
+        self.up3 = Up(256, 128 // factor, norm=norm, bilinear=bilinear) 
+        self.up4 = Up(128, 64, norm=norm, bilinear=bilinear)
         self.outc = OutConv(64, n_classes)
 
     def forward(self, x):
@@ -37,12 +38,9 @@ class UNet_model(nn.Module):
         y4 = self.up4(y3, x1)
         logits = self.outc(y4)
         return logits
-        #Layer   # 0     1    2   3   4  5   6   7   8   9
 
 
 """ Parts of the U-Net model """
-
-
 
 class DoubleConv(nn.Module):
     """(convolution => [BN] => ReLU) * 2"""

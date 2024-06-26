@@ -2,7 +2,7 @@ import torch
 from monai.metrics import DiceMetric, SurfaceDistanceMetric
 import torch.nn.functional as F
 
-
+# Compute DSC
 def dice(labels, pred, n_class):
     dice_metric = DiceMetric(reduction="mean_batch")
     compact_pred = torch.argmax(pred, dim=1).unsqueeze(1)
@@ -16,6 +16,7 @@ def dice(labels, pred, n_class):
 
     return metric.detach().cpu().numpy()
 
+# Compute ASSD
 def assd(labels, pred, n_class, pixdim):
     
     assd_metric = SurfaceDistanceMetric(reduction="mean_batch", symmetric=True)
@@ -31,6 +32,7 @@ def assd(labels, pred, n_class, pixdim):
 
     return metric.detach().cpu().numpy() * pixdim 
 
+# Get correct data labels
 def get_labels(pred):
     match pred:
         case "MYO":

@@ -43,11 +43,8 @@ class Saver():
     self.writer.add_hparams(hparam_dict=hparams, metric_dict={})
 
 
-  def write_val_dsc(self, ep, new_val, new_val_false, assd):
-     self.writer.add_scalar("Validation Dice", new_val, ep)
+  def write_val_dsc(self, ep, new_val_false):
      self.writer.add_scalar("Validation Dice False", new_val_false, ep)
-     self.writer.add_scalar("Validation ASSD", assd, ep)
-
 
   # write losses and images to tensorboard
   def write_display(self, ep, model):
@@ -66,7 +63,7 @@ class Saver():
 
 
   # save model
-  def write_model(self, ep, model, val_dcs, val_dcs_false):
+  def write_model(self, ep, model, val_dcs_false):
     print(f"--- Remove old model before saving new one ---")
     # Define the pattern to search for existing model files in the directory
     existing_model_files = glob.glob(f"{self.model_dir}/*.pth")
@@ -77,9 +74,8 @@ class Saver():
             print(f"Deleted old model file: {file_path}")
         except OSError as e:
             print(f"Error deleting file {file_path}: {e}")
-  
 
-    print(f"--- save the model @ ep {ep} with dcs {val_dcs} ---")
-    filename = f"{self.model_dir}/ep:{ep}_val:{val_dcs}_valFalse{val_dcs_false}_.pth"
+    print(f"--- save the model @ ep {ep} with value {val_dcs_false} ---")
+    filename = f"{self.model_dir}/ep:{ep}_val:{val_dcs_false}_.pth"
     model.save(filename, ep)
    

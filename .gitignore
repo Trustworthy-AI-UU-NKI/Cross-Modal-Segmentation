@@ -9,10 +9,10 @@ data/MMWHS/MR_withGT_proc/
 data/MMWHS/fake_CT/
 data/MMWHS/fake_MR/
 
-baselines/checkpoints/
-baselines/UNET_logs/
+baselines/checkpoints_models/
 baselines/DDFSeg/logs/
 baselines/DDFSeg/results/
 baselines/DDFSeg/src/__pycache__
 baselines/__pycache__
+
 results/__pycache__

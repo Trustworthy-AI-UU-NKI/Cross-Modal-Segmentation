@@ -10,7 +10,7 @@ from monai.transforms import (
 import numpy as np
 from torch.utils.data import Dataset
 
-
+# MMWHS dataset
 class MMWHS(Dataset):
     def __init__(self, data_dir, fold, labels = [1, 0, 0, 0, 0, 0, 0]):
         self.data_dir = data_dir
@@ -44,7 +44,7 @@ class MMWHS(Dataset):
     def __len__(self):
         return self.dataset_size
     
-
+# CHAOS dataset
 class CHAOS(Dataset):
     def __init__(self, data_dir, fold, labels = [1, 0, 0, 0]):
         np.random.seed(42)

@@ -6,7 +6,7 @@ from networks import *
 import random
 from torch.optim import lr_scheduler
 
-
+# Model class
 class DDFSeg(nn.Module):
     def __init__(self, args, channel_im = 1, num_classes=2, pool_size = 50):
         super(DDFSeg, self).__init__()
@@ -122,7 +122,7 @@ class DDFSeg(nn.Module):
         self.s_A_sch.step()
         self.learning_rate_seg = self.lambda_rule(ep)
 
-
+    # Buffer of fake images from source domain
     def fake_image_pool_A(self, fake):
         if self.num_fake_inputs < self._pool_size:
             self.fake_images_A[self.num_fake_inputs] = fake.cpu().detach()
@@ -138,6 +138,7 @@ class DDFSeg(nn.Module):
             else:
                 return fake
             
+    # Buffer of fake images from target domain
     def fake_image_pool_B(self, fake):
         if self.num_fake_inputs < self._pool_size:
             self.fake_images_B[self.num_fake_inputs] = fake.cpu().detach()
@@ -188,11 +189,6 @@ class DDFSeg(nn.Module):
 
 
     def forward_eval(self, images_a, images_b):
-        latent_tmpb = self.encoder_C_AB(images_b)
-        latent_b = self.encoder_C_B(latent_tmpb)
-
-        pred_mask = self.segmenter(latent_b) 
-
         latent_tmpa = self.encoder_C_AB(images_a)
         latent_a = self.encoder_C_A(latent_tmpa)
         latent_b_diff = self.encoder_D_B(images_b)
@@ -201,21 +197,16 @@ class DDFSeg(nn.Module):
         fake_images_tmp_b = self.decoder_AB(torch.cat((latent_a, latent_b_diff), dim=1))
         fake_images_b = self.decoder_B(fake_images_tmp_b, images_a[:, 1, :, :].unsqueeze(1))
 
-
         # Find content from fake image
         latent_fake_btmp = self.encoder_C_AB(torch.cat((fake_images_b, fake_images_b, fake_images_b), dim=1))
         latent_fake_b = self.encoder_C_B(latent_fake_btmp)
 
         pred_mask_fake = self.segmenter(latent_fake_b)
 
-        softmax_output = F.softmax(pred_mask, dim=1)
-        softmax_output = softmax_output.clamp(-1e15, 1e15) 
-        
-
         softmax_output_fake = F.softmax(pred_mask_fake, dim=1)
         softmax_output_fake = softmax_output_fake.clamp(-1e15, 1e15)
 
-        return softmax_output, softmax_output_fake
+        return softmax_output_fake
 
 
     def forward_G(self, images_a, images_b):
@@ -506,7 +497,6 @@ class DDFSeg(nn.Module):
 
 
         # Cross cycle
-        # print("cross cycle forward pass")
 
         FA_separate_B = self.encoder_D_B(torch.cat((fake_images_a, fake_images_a, fake_images_a), dim=1))
         FB_separate_A = self.encoder_D_A(torch.cat((fake_images_b, fake_images_b, fake_images_b), dim=1))
@@ -529,6 +519,7 @@ class DDFSeg(nn.Module):
         self.dif_loss_item += loss_diff.item()
         self.dif_trainer.step()
 
+    # Optimize order
     def update(self, images_a, images_b, labels_a, loss_f_weight_value):
         self.update_GA_DB(images_a, images_b)
         self.update_SB(images_a, images_b, labels_a, loss_f_weight_value)

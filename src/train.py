@@ -113,7 +113,6 @@ def train_net(train_loader, val_loader, fold, device, args, len_train_data, num_
                     torch.save(model.state_dict(), os.path.join(save_dir, f'CP_epoch_{epoch}_model_{best_score}.pth'))
 
                     logging.info('Checkpoint saved !')
-            break
                     
             
     writer.close()
@@ -144,7 +143,6 @@ def train_k_folds(args, labels, num_classes, device, dataset_type):
 
         train_net(train_loader, val_loader, fold, device, args, len_train_data, num_classes, save_dir, writer) 
         fold += 1
-        break
 
     print("Training complete!")
 
