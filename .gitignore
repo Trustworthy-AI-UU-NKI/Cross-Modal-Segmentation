@@ -8,5 +8,3 @@ baselines/DDFSeg/results/
 baselines/DDFSeg/src/__pycache__
 baselines/__pycache__
 results/__pycache__
-src/logs/
-src/checkpoints/

@@ -2,10 +2,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-import torchvision.transforms.functional as TVF
-from torchvision.transforms import InterpolationMode
-import cv2
-import random
 
 from models.encoder import *
 from models.decoder import *
@@ -13,16 +9,14 @@ from models.segmentor import *
 from models.discriminator import *
 from models.weight_init import *
 from composition.model import *
-from composition.helpers import *
 
 from composition.losses import ClusterLoss
 from monai.losses import DiceLoss
-
 from losses import *
 
 from utils import *
-import glob
-           
+
+# Class of our proposed method           
 class CrossCSD(nn.Module):
     def __init__(self, args, device, image_channels, num_classes, vMF_kappa, fold_nr):
         super(CrossCSD, self).__init__()
@@ -35,6 +29,7 @@ class CrossCSD(nn.Module):
         self.true_clu_loss = True
         self.fold = fold_nr
 
+        # Get modules
         self.activation_layer = ActivationLayer(vMF_kappa)
         self.encoder_source = Encoder(image_channels)
         self.decoder_source = Decoder(image_channels)
@@ -47,6 +42,7 @@ class CrossCSD(nn.Module):
         # Initialize weights
         self.initialize_model()
 
+        # Initialize all optimizers
         self.optimizer_source = optim.Adam(list(self.encoder_source.parameters()) + list(self.decoder_source.parameters()) + list(self.encoder_target.parameters()), lr=args.learning_rate, betas=(0.5, 0.999))
         self.scheduler_source = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer_source, 'max', patience=args.k2)
 
@@ -56,26 +52,27 @@ class CrossCSD(nn.Module):
         self.optimizer_disc_source = optim.Adam(self.discriminator_source.parameters(), lr=args.learning_rate, betas=(0.5, 0.999))
         self.optimizer_disc_target = optim.Adam(self.discriminator_target.parameters(), lr=args.learning_rate, betas=(0.5, 0.999))
 
+        # Losses
         self.l1_distance = nn.L1Loss().to(device)
         self.cluster_loss = ClusterLoss().to(device)
         self.dice_loss = DiceLoss(include_background=False, softmax=True).to(device)
         self.gen_loss = GeneratorLoss()
-
         self.disc_loss_s = DiscriminatorLoss()
         self.disc_loss_t = DiscriminatorLoss()
 
     
+    # Get vMFKernels and initialize the network
     def initialize_model(self):
         initialize_weights(self, self.weight_init)
         weights = torch.zeros([self.vc_num, 64, 1, 1]).type(torch.FloatTensor)
         nn.init.xavier_normal_(weights)
         self.conv1o1 = Conv1o1Layer(weights, self.device)
     
-
+    # Forward pass through the compositional layer
     def comp_layer_forward(self, features):
         kernels = self.conv1o1.weight
-        vc_activations = self.conv1o1(features[self.layer]) # fp*uk
-        vmf_activations = self.activation_layer(vc_activations) # L
+        vc_activations = self.conv1o1(features[self.layer])
+        vmf_activations = self.activation_layer(vc_activations) 
         norm_vmf_activations = torch.zeros_like(vmf_activations)
         norm_vmf_activations = norm_vmf_activations.to(self.device)
         for i in range(vmf_activations.size(0)):
@@ -84,137 +81,142 @@ class CrossCSD(nn.Module):
         self.vc_activations = vc_activations
         return norm_vmf_activations, kernels
 
-    def forward_eval(self, x_s, x_t, x_s_label, x_t_label):
+    # Forward pass for evaluation
+    def forward_eval(self, x_s, x_s_label):
+        # Cross reconstruction
         features_s = self.encoder_source(x_s)
-        features_t = self.encoder_target(x_t)
-
         fake_image_t = self.decoder_target(features_s[self.layer]) # style from tareget domain, content of source domains
-        fake_image_s = self.decoder_source(features_t[self.layer])# style from source domain, content of target domains
-        
-        fake_features_s = self.encoder_source(fake_image_s) 
-        fake_features_t = self.encoder_target(fake_image_t)
-        cross_rec_s = self.decoder_source(fake_features_t[self.layer]) # should be similar to features_s
-        cross_rec_t = self.decoder_target(fake_features_s[self.layer]) # should be similar to features_ts
+        fake_features_t = self.encoder_target(fake_image_t) 
+        cross_rec_s = self.decoder_source(fake_features_t[self.layer])
 
+        # Calculate losses of evaluation data
         cross_rec_loss_s = self.l1_distance(cross_rec_s, x_s)
-        cross_rec_loss_t = self.l1_distance(cross_rec_t, x_t)
 
-        com_features_t, _ = self.comp_layer_forward(features_t)
+        # Get compositional features of true and fake target image
         com_fake_features_t, _ = self.comp_layer_forward(fake_features_t)
 
-        pre_seg_t = self.segmentor(com_features_t)
+        # Get predicted segmentation mask of fake target images for evaluation
         pre_fake_seg_t = self.segmentor(com_fake_features_t)
-
-        compact_pred_t = torch.argmax(pre_seg_t, dim=1).unsqueeze(1)
         compact_pred_fake_t = torch.argmax(pre_fake_seg_t, dim=1).unsqueeze(1)
 
-        dsc_target = dice(x_t_label, pre_seg_t, self.num_classes)
-        dsc_target_total = torch.mean(dsc_target[1:])
+        # Calculate metrics
         dsc_target_fake = dice(x_s_label, pre_fake_seg_t, self.num_classes)
         dsc_target_fake_total = torch.mean(dsc_target_fake[1:])
-
-        assd_target = assd(x_t_label, pre_seg_t, self.num_classes, pix_dim=x_t.meta["pixdim"][1])
         assd_target_fake = assd(x_s_label, pre_fake_seg_t, self.num_classes, pix_dim=x_s.meta["pixdim"][1])
 
-        metrics_dict = {'Source/total': cross_rec_loss_s.item(), 'Target/total': cross_rec_loss_t.item(),
-                        'Target/DSC': dsc_target_total, 'Target/DSC_fake': dsc_target_fake_total, 'Target/DSC_0': dsc_target[0], 'Target/DSC_1': dsc_target[1],
-                        'Target/DSC_fake_0': dsc_target_fake[0], 'Target/DSC_fake_1': dsc_target_fake[1], 'Target/assd': assd_target.item(), 'Target/assd_fake': assd_target_fake.item()}
+        # For tensorboard logging
+        metrics_dict = {'Source/total': cross_rec_loss_s.item(),
+                        'Target/DSC_fake': dsc_target_fake_total, 'Target/DSC_fake_0': dsc_target_fake[0], 
+                        'Target/DSC_fake_1': dsc_target_fake[1], 'Target/assd_fake': assd_target_fake.item()}
 
-        images_dict = {'Source/image': x_s, 'Target/image': x_t, 'Target/Cross_reconstructed': cross_rec_t, 
+        images_dict = {'Source/image': x_s,
                        'Source/Cross_reconstructed': cross_rec_s, 'Target/fake': fake_image_t, 
-                       'Target/Predicted_seg': compact_pred_t, 'Target/Fake_predicted_seg': compact_pred_fake_t, 'Source/label': x_s_label, 'Target/label': x_t_label}
+                         'Target/Fake_predicted_seg': compact_pred_fake_t, 'Source/label': x_s_label}
 
 
-        visuals_dict = {'Target': com_features_t, 'Fake_Target': com_fake_features_t}
+        visuals_dict = {'Fake_Target': com_fake_features_t}
         return metrics_dict, images_dict, visuals_dict
     
-    def forward_test(self, x_t):
+    # Forward pass for testing
+    def forward_test(self, x_t, x_t_label):
         features_t = self.encoder_target(x_t)
         com_features_t, _ = self.comp_layer_forward(features_t)
         pre_seg_t = self.segmentor(com_features_t)
         compact_pred_t = torch.argmax(pre_seg_t, dim=1).unsqueeze(1)
 
-        return com_features_t, compact_pred_t
+        # Calculate metrics
+        dsc_target = dice(x_t_label, pre_seg_t, self.num_classes)
+        assd_target = assd(x_t_label, pre_seg_t, self.num_classes, pix_dim=x_t.meta["pixdim"][1])
+        
+        metrics_dict = {'Target/DSC_0': dsc_target[0], 
+                        'Target/DSC_1': dsc_target[1], 'Target/assd': assd_target.item()}
 
+        # For tensorboard logging
+        images_dict = {'Target/image': x_t, 'Target/label': x_t_label,
+                       'Target/predicted_seg': compact_pred_t}
 
+        visuals_dict = {'Target': com_features_t}
+        return metrics_dict, images_dict, visuals_dict
+
+    # Forward pass for training
     def forward(self, x_s, x_t):
         features_s = self.encoder_source(x_s)
         features_t = self.encoder_target(x_t)
         rec_s = self.decoder_source(features_s[self.layer])
         rec_t = self.decoder_target(features_t[self.layer])
 
-
-        fake_image_t = self.decoder_target(features_s[self.layer]) # style from tareget domain, content of source domains
-        fake_image_s = self.decoder_source(features_t[self.layer]) #style from source domain, content from target domain
+        fake_image_t = self.decoder_target(features_s[self.layer]) # style from target domain, content of source domain image
+        fake_image_s = self.decoder_source(features_t[self.layer]) #style from source domain, content of target domain image
         
         fake_features_s = self.encoder_source(fake_image_s)
         fake_features_t = self.encoder_target(fake_image_t)
         cross_rec_s = self.decoder_source(fake_features_t[self.layer])
         cross_rec_t = self.decoder_target(fake_features_s[self.layer])
 
-        #com_features_s, kernels = self.comp_layer_forward(features_s)
+        # Get compositional features and predicted segmentation mask of fake target image
         com_fake_features_t, kernels = self.comp_layer_forward(fake_features_t)
-
-        #pre_seg_s = self.segmentor(com_features_s)
         pre_fake_seg_t = self.segmentor(com_fake_features_t)
 
         results = {"rec_s": rec_s, "cross_img_s": cross_rec_s, "fake_img_s": fake_image_s, "rec_t": rec_t, "cross_img_t": cross_rec_t, "fake_img_t": fake_image_t, 
                     "feats_s": features_s[self.layer], "feats_t": features_t[self.layer], "fake_feats_t": fake_features_t[self.layer], "pre_fake_seg_t": pre_fake_seg_t,  "kernels": kernels} # "pre_seg_s": pre_seg_s,
         return results
 
-
-    def update(self, img_s, label_s, img_t, epoch):
+    # Update step in training loop
+    def update(self, img_s, label_s, img_t):
+        # Forward pass
         results = self.forward(img_s, img_t)
 
-        # Discriminators
+        # Discriminators output
         prob_true_source_is_true = self.discriminator_source(img_s.detach())
         prob_fake_source_is_true = self.discriminator_source(results["fake_img_s"].detach())
         prob_true_target_is_true = self.discriminator_target(img_t.detach())
         prob_fake_target_is_true = self.discriminator_target(results["fake_img_t"].detach())
         
-        # update Discriminators
+        # Get loss Discriminators
         disc_loss_s = self.disc_loss_s(prob_true_source_is_true, prob_fake_source_is_true) 
         disc_loss_t = self.disc_loss_t(prob_true_target_is_true, prob_fake_target_is_true)
 
-        # print("update discriminator source")
+        # Update source discriminator  (line 1 algorithm 1)
         self.optimizer_disc_source.zero_grad()
         disc_loss_s.backward()
         nn.utils.clip_grad_value_(self.discriminator_source.parameters(), 0.1)
         self.optimizer_disc_source.step()
 
-        # Update Target
+        # Update target discriminator  (line 2 algorithm 1)
         self.optimizer_disc_target.zero_grad()
         disc_loss_t.backward()
         nn.utils.clip_grad_value_(self.discriminator_target.parameters(), 0.1)
         self.optimizer_disc_target.step()
 
+        # Get output source discriminator
         prob_fake_source_is_true_gen = self.discriminator_source(results["fake_img_s"])
 
+        # Get source losses
         gen_loss_s = self.gen_loss(prob_fake_source_is_true_gen)
         cross_reco_loss_s = self.l1_distance(results["cross_img_s"], img_s)
-
         batch_loss_s = cross_reco_loss_s + gen_loss_s
 
-        # Update Source
+        # Update source (line 3 algorithm 1)
         self.optimizer_source.zero_grad()
         batch_loss_s.backward()
         nn.utils.clip_grad_value_(self.parameters(), 0.1)
         self.optimizer_source.step()
         
-        # Update Target
+        # Another forward pass for correct gradient computation
         results = self.forward(img_s, img_t)
 
+        # Get output target discriminator
         prob_fake_target_is_true_gen = self.discriminator_target(results["fake_img_t"])
+
+        # Get target losses
         gen_loss_t = self.gen_loss(prob_fake_target_is_true_gen)
         cross_reco_loss_t = self.l1_distance(results["cross_img_t"], img_t.detach())
-
         clu_loss_t = self.cluster_loss(results["feats_t"].detach(), results["kernels"])
-        
         label_s_oh = F.one_hot(label_s.long().squeeze(1), num_classes=self.num_classes).permute(0, 3, 1, 2)
         dice_loss_t = self.dice_loss(results["pre_fake_seg_t"], label_s_oh)
         batch_loss_t = cross_reco_loss_t + gen_loss_t + dice_loss_t + clu_loss_t
         
-        # Update target
+        # Update target (line 4 algorithm 1)
         self.optimizer_target.zero_grad()
         batch_loss_t.backward()
         nn.utils.clip_grad_value_(self.parameters(), 0.1)

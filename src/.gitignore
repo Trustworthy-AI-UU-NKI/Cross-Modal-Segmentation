@@ -1,4 +1,3 @@
 __pycache__
-logs/
-checkpoints/
+checkpoints_true/
 models/__pycache__

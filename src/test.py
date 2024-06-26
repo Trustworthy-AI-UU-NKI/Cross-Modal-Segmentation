@@ -3,8 +3,8 @@ import os
 import argparse
 import logging
 from torch.utils.data import DataLoader
-from mmwhs_dataloader import MMWHS
-from chaos_dataloader import CHAOS
+from src.data_loaders.mmwhs_dataloader import MMWHS_single
+from src.data_loaders.chaos_dataloader import CHAOS_single
 from models.crosscompcsd import CrossCSD
 from torch.utils.tensorboard import SummaryWriter
 from sklearn.model_selection import KFold
@@ -12,29 +12,24 @@ import pytorch_lightning as pl
 import glob
 import numpy as np
 
-from eval import eval_vmfnet_mm
+from eval import test_vmfnet_mm
 from utils import *
 
 
 
 
 def get_args():
-    usage_text = (
-        "vMFNet Pytorch Implementation"
-        "Usage:  python train.py [options],"
-        "   with [options]:"
-    )
+    usage_text = ()
     parser = argparse.ArgumentParser(description=usage_text)
     parser.add_argument('--seed', default=42, type=int,help='Seed to use for reproducing results') # --> their default was 14
-    parser.add_argument('--bs', type= int, default=1, help='Number of inputs per batch')
+    parser.add_argument('--bs', type= int, default=1, help='Batsh size')
     parser.add_argument('--cp', type=str, default='checkpoints/', help='The name of the checkpoints.')
-    parser.add_argument('--name', type=str, default='test_MM_KLD', help='The name of this train/test. Used when storing information.')
+    parser.add_argument('--name', type=str, default='test', help='The name of this run.')
     parser.add_argument('--learning_rate', type=float, default='0.0001', help='The learning rate for model training')
-    parser.add_argument('--weight_init', type=str, default="xavier", help='Weight initialization method, or path to weights file (for fine-tuning or continuing training)')
+    parser.add_argument('--weight_init', type=str, default="xavier", help='Weight initialization method')
     parser.add_argument('--k2', type=int,  default=10, help='Check decay learning')
-    parser.add_argument('--vc_num', type=int,  default=12, help='Kernel/distributions amount')
-    parser.add_argument('--data_dir_t',  type=str, default='../data/other/CT_withGT_proc/', help='The name of the data dir.')
-    parser.add_argument('--data_dir_s',  type=str, default='../data/other/MR_withGT_proc/', help='The name of the data dir.')
+    parser.add_argument('--vc_num', type=int,  default=10, help='Kernel/distributions amount')
+    parser.add_argument('--data_dir',  type=str, default='../data/MMWHS/CT_withGT_proc/', help='The name of the target data dir.')
     parser.add_argument('--k_folds', type= int, default=5, help='Cross validation')
     parser.add_argument('--pred', type=str, default='MYO', help='Segmentation task')
     parser.add_argument('--data_type', type=str, default="MMWHS") #MMWHS, RetinalVessel
@@ -42,7 +37,7 @@ def get_args():
     return parser.parse_args()
 
 
-def test_net(save_dir, val_loader, writer, device, num_classes, fold):
+def test_net(save_dir, test_loader, writer, device, num_classes, fold):
     pretrained_model = glob.glob(os.path.join(save_dir, "*.pth"))
 
     if pretrained_model == []:
@@ -59,15 +54,12 @@ def test_net(save_dir, val_loader, writer, device, num_classes, fold):
     model.eval()
 
     # Evaluate model
-    metrics_dict, images_dict, visuals_dict, lpips_metric = eval_vmfnet_mm(model, val_loader, device)
+    assd, dsc_0, dsc_1, images_dict, visuals_dict = test_vmfnet_mm(model, test_loader, device)
 
-    # Get all appropriate test metrics
-    writer.add_scalar(f'Test_metrics/lpips_target', lpips_metric, 0)
-    new_metric = (1-lpips_metric) + metrics_dict["Target/DSC_fake"]
-    writer.add_scalar(f'Val_metrics/lpips_dscf', new_metric , 0)
-
-    for key, value in metrics_dict.items():
-        writer.add_scalar(f'Test_metrics/{key}', value, 0)
+    # Show test metrics and images in Tensorboard
+    writer.add_scalar(f'Test_metrics/assd', assd, 0)
+    writer.add_scalar(f'Test_metrics/dsc_0', dsc_0, 0)
+    writer.add_scalar(f'Test_metrics/dsc_1', dsc_1, 0)
     
     for key, value in images_dict.items():
         writer.add_images(f'Test_images/{key}', value, 0, dataformats='NCHW')
@@ -76,7 +68,7 @@ def test_net(save_dir, val_loader, writer, device, num_classes, fold):
         for i in range(args.vc_num):
             writer.add_images(f'Test_visuals/{key}_{i+1}', value[:,i,:,:].unsqueeze(1), 0, dataformats='NCHW')
 
-    return metrics_dict
+    return assd, dsc_0, dsc_1
 
 
 def test_k_folds(args, labels, num_classes, device, dataset_type):
@@ -96,15 +88,15 @@ def test_k_folds(args, labels, num_classes, device, dataset_type):
         os.makedirs(log_dir, exist_ok=True)
         writer = SummaryWriter(log_dir=log_dir)
     
-        print("loading test data")
+        print("Loading test data")
         dataset_test = dataset_type(args, labels, fold_test) 
         test_loader = DataLoader(dataset_test, batch_size=1, num_workers=4)
-        metrics_fold = test_net(save_dir, test_loader, writer, device, num_classes, fold)
+        assd, dsc_0, dsc_1 = test_net(save_dir, test_loader, writer, device, num_classes, fold)
         fold += 1
 
-        dsc_scores.append(metrics_fold['Target/DSC'].cpu())
-        dsc_scores_BG.append(metrics_fold['Target/DSC_0'].cpu())
-        assd_scores.append(metrics_fold['Target/assd'])
+        dsc_scores.append(dsc_1)
+        dsc_scores_BG.append(dsc_0)
+        assd_scores.append(assd)
 
     # Print all test metrics 
     dsc_scores_BG = np.array(dsc_scores_BG)
@@ -133,9 +125,9 @@ def main(args):
 
     # Set right dataset
     if args.data_type == "MMWHS":
-        dataset_type = MMWHS
+        dataset_type = MMWHS_single
     elif args.data_type == "chaos":
-        dataset_type = CHAOS
+        dataset_type = CHAOS_single
     else:
         raise ValueError(f"Data type {args.data_type} not supported")
 

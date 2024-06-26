@@ -42,5 +42,11 @@ class Conv1o1Layer(nn.Module):
             print('isnan conv1o1')
         return out
 
+def getVmfKernels(dict_dir, device):
+	vc = np.load(dict_dir, allow_pickle=True)
+	vc = vc[:, :, np.newaxis, np.newaxis]
+	vc = torch.from_numpy(vc).type(torch.FloatTensor)
+	return vc
+
 
 
