@@ -50,7 +50,6 @@ class CHAOS(Dataset):
         np.random.seed(42)
         self.data_dir = data_dir
         self.target_labels = labels
-        print("CHAOS dataset ", self.data_dir)
 
         self.all_images = sorted(glob.glob(os.path.join(self.data_dir, "images/case_*")))
         self.all_labels = sorted(glob.glob(os.path.join(self.data_dir, "labels/case_*")))
@@ -71,8 +70,6 @@ class CHAOS(Dataset):
         self.data = [{"img": img, "seg": seg} for img, seg in zip(self.imgs, self.labs)] 
 
     def __getitem__(self, index):
-        # print(self.data)
-        print(self.data[index])
         data_point = self.transform_dict(self.data[index])
         
         image = data_point["img"]

@@ -1,6 +1,14 @@
 jobs/
-data/CHAOS
-data/MMWHS
+
+data/CHAOS/fake_T1/
+data/CHAOS/fake_T2/
+data/CHAOS/T1/
+data/CHAOS/T2/
+data/MMWHS/CT_withGT_proc/
+data/MMWHS/MR_withGT_proc/
+data/MMWHS/fake_CT/
+data/MMWHS/fake_MR/
+
 baselines/checkpoints/
 baselines/UNET_logs/
 baselines/DDFSeg/logs/

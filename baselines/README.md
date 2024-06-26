@@ -1,8 +1,16 @@
 # Baselines
 
-This folder contains the code for all the baselines, except for the vMFNet. That can be found in the src folder.  
+This folder contains the implementation for all the baselines; No Adaptation UNet, Full Supervision UNet, vMFnet, DRIT++ with UNet and with ResUNet and DDFSeg. 
 
-# UNet-NA and UNet-FS
+# Code structure
+- The `data` folder contains the code for preprocessing the data, visualization and the actual preprocessed data.
+- The `baselines` folder contains the code for the baselines; No Adaptation UNet, Full Supervision UNet, vMFnet, DRIT++ with UNet and with ResUNet and DDFSeg. 
+- The `src` folder contains the code for our proposed method.
+- The `data` folder contains the links to out preprocessed data, some notebooks to explore the data and our preprocessing steps.
+
+## UNet-NA 
+
+## UNet-FS
 
 TO Train, run
 
@@ -10,7 +18,16 @@ The checkpoints for the saved models ()used for the final results) can be obtain
 
 TO evaluate run
 
+## vMFNet
 
+This code is made with XXX. For more information, please see the REadme in the DDFSeg folder. 
+
+To train, cd to the DDFSeg folder. 
+
+
+Checkpiints are also saved and can be found in (put them in the DDFseg checkpoints file)
+
+TO evalute, run
 
 # DRIT++ with UNet and DRIT++ with Res UNet
 
@@ -42,3 +59,6 @@ To train, cd to the DDFSeg folder.
 Checkpiints are also saved and can be found in (put them in the DDFseg checkpoints file)
 
 TO evalute, run
+
+
+

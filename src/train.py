@@ -10,8 +10,8 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from sklearn.model_selection import KFold
 
-from src.data_loaders.mmwhs_dataloader import MMWHS
-from src.data_loaders.chaos_dataloader import CHAOS
+from data.mmwhs_dataloader import MMWHS
+from data.chaos_dataloader import CHAOS
 from models.crosscompcsd import CrossCSD
 from eval import eval_vmfnet_mm
 from utils import *
@@ -113,6 +113,7 @@ def train_net(train_loader, val_loader, fold, device, args, len_train_data, num_
                     torch.save(model.state_dict(), os.path.join(save_dir, f'CP_epoch_{epoch}_model_{best_score}.pth'))
 
                     logging.info('Checkpoint saved !')
+            break
                     
             
     writer.close()
@@ -143,6 +144,7 @@ def train_k_folds(args, labels, num_classes, device, dataset_type):
 
         train_net(train_loader, val_loader, fold, device, args, len_train_data, num_classes, save_dir, writer) 
         fold += 1
+        break
 
     print("Training complete!")
 

@@ -30,6 +30,12 @@ class Decoder(nn.Module):
 
         self.num_channels = num_channels
         self.anatomy_out_channels = 0
+        self.layer = 8
+
+        self.up2 = deconv_bn_relu(256, 128, kernel_size=4, stride=2, padding=1)
+        self.double_conv1 = DoubleConv(128 + self.anatomy_out_channels, 128)
+        self.up3 = nn.ConvTranspose2d(128+self.anatomy_out_channels, 128+self.anatomy_out_channels, kernel_size=2, stride=2)
+        self.double_conv2 = DoubleConv(128+self.anatomy_out_channels, 64)
 
         self.double_conv3 = DoubleConv(64 + self.anatomy_out_channels, 64)
         self.up4 = nn.ConvTranspose2d(64+self.anatomy_out_channels, 64+self.anatomy_out_channels, kernel_size=2, stride=2)

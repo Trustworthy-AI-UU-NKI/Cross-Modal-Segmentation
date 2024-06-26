@@ -41,10 +41,10 @@ def eval_vmfnet_mm(model, loader, device):
                 fake_dsc += metrics_dict["Target/DSC_fake"]
 
             # Get LPIPS
-            img_t3 = torch.cat((img_t, img_t, img_t), dim=1)
+            img_t3 = torch.cat((img_t, img_t, img_t), dim=1).to(device)
             fake_img = ScaleIntensity()(images_dict['Target/fake'])
             fake_img_t3 = torch.cat((fake_img, fake_img, fake_img), dim=1)
-            lpips_list_target.append(lpips(fake_img_t3, img_t3))
+            lpips_list_target.append(lpips(fake_img_t3, img_t3).cpu())
 
             # Choose images to show in TB. 5 is chosen randomly
             if display_itr == 5:
@@ -80,7 +80,7 @@ def test_vmfnet_mm(model, loader, device):
 
             # Get all metrics, images and compositional representations for evaluation
             with torch.no_grad():
-                metrics_dict, images_dict, visuals_dict  = model.test(img_t, label_t)
+                metrics_dict, images_dict, visuals_dict  = model.forward_test(img_t, label_t)
                         
             # Get ASSD
             if np.isinf(metrics_dict["Target/assd"]).any():
@@ -105,5 +105,9 @@ def test_vmfnet_mm(model, loader, device):
             display_itr += 1
             pbar.update()
 
+    if n_val_assd == 0:
+        assd = np.inf 
+    else:
+        assd = assd / n_val_assd
     
-    return assd/n_val_assd, dsc_0/n_val, dsc_1/n_val_dsc, image_dict_show, visual_dict_show
+    return assd, dsc_0/n_val, dsc_1/n_val_dsc, image_dict_show, visual_dict_show

@@ -19,7 +19,7 @@ To train the model on the MM-WHS dataset with CT as source domain, MRI as target
 
 ```
 source activate gpu_env
-train.py --cp checkpoints/proposed_MMWHS --name MYO_10_Target_MRI --pred MYO --vc_num 10 --epochs 200 --data_dir_s ../data/MMWHS/CT_withGT_proc/  --data_dir_t ../data/MMWHS/MR_withGT_proc/ --data_type MMWHS
+python train.py --cp checkpoints/proposed_MMWHS --name MYO_10_Target_MRI --pred MYO --vc_num 10 --epochs 200 --data_dir_s ../data/MMWHS/CT_withGT_proc/  --data_dir_t ../data/MMWHS/MR_withGT_proc/ --data_type MMWHS
 ```
 
 To run the model for the other direction (MRI $\rightarrow$ CT), please switch the --data_dir_s and --data_dir_t arguments. To change the segmentation task to LV or RV segmentation, put --pred to LV or RV, respectively. Moreover, you can change the name and checkpoint directory accordingly. 
@@ -29,7 +29,7 @@ To train the model on the CHOAS dataset with T1 as source domain, T2 as target d
 
 ```
 source activate gpu_env
-train.py --cp checkpoints/proposed_CHAOS --name Liver_10_Target_T2 --pred Liver --vc_num 10 --epochs 200 --data_dir_s ../data/CHAOS/T1/  --data_dir_t ../data/CHOAS/T2/ --data_type CHAOS
+python train.py --cp checkpoints/proposed_CHAOS --name Liver_10_Target_T2 --pred Liver --vc_num 10 --epochs 200 --data_dir_s ../data/CHAOS/T1/  --data_dir_t ../data/CHOAS/T2/ --data_type CHAOS
 ```
 
 To run the model for the other direction (T2 $\rightarrow$ T1), please switch the --data_dir_s and --data_dir_t arguments. Moreover, you can change the name and checkpoint directory accordingly. 
@@ -39,7 +39,7 @@ To run the model for the other direction (T2 $\rightarrow$ T1), please switch th
 To test the model on the MM-WHS dataset with MRI as target domain trying to segment the myocardium, please run the following code.
 ```
 source activate gpu_env
-test.py --cp checkpoints/proposed_MMWHS --name MYO_10_Target_MRI --pred MYO --vc_num 10 --data_dir ../data/MMWHS/MR_withGT_proc/ --data_type MMWHS
+python test.py --cp checkpoints/proposed_MMWHS --name MYO_10_Target_MRI --pred MYO --vc_num 10 --data_dir ../data/MMWHS/MR_withGT_proc/ --data_type MMWHS
 ```
 
 Like before, you can change the --data_dir, --data_type and --pred arguments, according to your task. Moreover, the --cp and --name arguments should be the same as your trained model.

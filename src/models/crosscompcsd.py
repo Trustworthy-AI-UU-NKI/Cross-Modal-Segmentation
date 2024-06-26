@@ -71,7 +71,7 @@ class CrossCSD(nn.Module):
     # Forward pass through the compositional layer
     def comp_layer_forward(self, features):
         kernels = self.conv1o1.weight
-        vc_activations = self.conv1o1(features[self.layer])
+        vc_activations = self.conv1o1(features[8])
         vmf_activations = self.activation_layer(vc_activations) 
         norm_vmf_activations = torch.zeros_like(vmf_activations)
         norm_vmf_activations = norm_vmf_activations.to(self.device)
@@ -85,9 +85,9 @@ class CrossCSD(nn.Module):
     def forward_eval(self, x_s, x_s_label):
         # Cross reconstruction
         features_s = self.encoder_source(x_s)
-        fake_image_t = self.decoder_target(features_s[self.layer]) # style from tareget domain, content of source domains
+        fake_image_t = self.decoder_target(features_s[8]) # style from tareget domain, content of source domains
         fake_features_t = self.encoder_target(fake_image_t) 
-        cross_rec_s = self.decoder_source(fake_features_t[self.layer])
+        cross_rec_s = self.decoder_source(fake_features_t[8])
 
         # Calculate losses of evaluation data
         cross_rec_loss_s = self.l1_distance(cross_rec_s, x_s)
@@ -119,10 +119,7 @@ class CrossCSD(nn.Module):
     
     # Forward pass for testing
     def forward_test(self, x_t, x_t_label):
-        features_t = self.encoder_target(x_t)
-        com_features_t, _ = self.comp_layer_forward(features_t)
-        pre_seg_t = self.segmentor(com_features_t)
-        compact_pred_t = torch.argmax(pre_seg_t, dim=1).unsqueeze(1)
+        com_features_t, compact_pred_t, pre_seg_t = self.test(x_t)
 
         # Calculate metrics
         dsc_target = dice(x_t_label, pre_seg_t, self.num_classes)
@@ -137,28 +134,35 @@ class CrossCSD(nn.Module):
 
         visuals_dict = {'Target': com_features_t}
         return metrics_dict, images_dict, visuals_dict
+    
+    def test(self, x_t):
+        features_t = self.encoder_target(x_t)
+        com_features_t, _ = self.comp_layer_forward(features_t)
+        pre_seg_t = self.segmentor(com_features_t)
+        compact_pred_t = torch.argmax(pre_seg_t, dim=1).unsqueeze(1)
+        return com_features_t, compact_pred_t, pre_seg_t
 
     # Forward pass for training
     def forward(self, x_s, x_t):
         features_s = self.encoder_source(x_s)
         features_t = self.encoder_target(x_t)
-        rec_s = self.decoder_source(features_s[self.layer])
-        rec_t = self.decoder_target(features_t[self.layer])
+        rec_s = self.decoder_source(features_s[8])
+        rec_t = self.decoder_target(features_t[8])
 
-        fake_image_t = self.decoder_target(features_s[self.layer]) # style from target domain, content of source domain image
-        fake_image_s = self.decoder_source(features_t[self.layer]) #style from source domain, content of target domain image
+        fake_image_t = self.decoder_target(features_s[8]) # style from target domain, content of source domain image
+        fake_image_s = self.decoder_source(features_t[8]) #style from source domain, content of target domain image
         
         fake_features_s = self.encoder_source(fake_image_s)
         fake_features_t = self.encoder_target(fake_image_t)
-        cross_rec_s = self.decoder_source(fake_features_t[self.layer])
-        cross_rec_t = self.decoder_target(fake_features_s[self.layer])
+        cross_rec_s = self.decoder_source(fake_features_t[8])
+        cross_rec_t = self.decoder_target(fake_features_s[8])
 
         # Get compositional features and predicted segmentation mask of fake target image
         com_fake_features_t, kernels = self.comp_layer_forward(fake_features_t)
         pre_fake_seg_t = self.segmentor(com_fake_features_t)
 
         results = {"rec_s": rec_s, "cross_img_s": cross_rec_s, "fake_img_s": fake_image_s, "rec_t": rec_t, "cross_img_t": cross_rec_t, "fake_img_t": fake_image_t, 
-                    "feats_s": features_s[self.layer], "feats_t": features_t[self.layer], "fake_feats_t": fake_features_t[self.layer], "pre_fake_seg_t": pre_fake_seg_t,  "kernels": kernels} # "pre_seg_s": pre_seg_s,
+                    "feats_s": features_s[8], "feats_t": features_t[8], "fake_feats_t": fake_features_t[8], "pre_fake_seg_t": pre_fake_seg_t,  "kernels": kernels} # "pre_seg_s": pre_seg_s,
         return results
 
     # Update step in training loop

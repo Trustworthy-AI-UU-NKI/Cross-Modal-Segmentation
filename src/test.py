@@ -3,8 +3,8 @@ import os
 import argparse
 import logging
 from torch.utils.data import DataLoader
-from src.data_loaders.mmwhs_dataloader import MMWHS_single
-from src.data_loaders.chaos_dataloader import CHAOS_single
+from data.mmwhs_dataloader import MMWHS_single
+from data.chaos_dataloader import CHAOS_single
 from models.crosscompcsd import CrossCSD
 from torch.utils.tensorboard import SummaryWriter
 from sklearn.model_selection import KFold
@@ -89,7 +89,7 @@ def test_k_folds(args, labels, num_classes, device, dataset_type):
         writer = SummaryWriter(log_dir=log_dir)
     
         print("Loading test data")
-        dataset_test = dataset_type(args, labels, fold_test) 
+        dataset_test = dataset_type(args.data_dir, fold_test, labels) 
         test_loader = DataLoader(dataset_test, batch_size=1, num_workers=4)
         assd, dsc_0, dsc_1 = test_net(save_dir, test_loader, writer, device, num_classes, fold)
         fold += 1

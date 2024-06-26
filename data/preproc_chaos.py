@@ -8,7 +8,6 @@ from monai.transforms import (
     ScaleIntensityd,
     MapLabelValued,
     SqueezeDimd,
-    AsChannelLastd,
     Transposed
 )
 

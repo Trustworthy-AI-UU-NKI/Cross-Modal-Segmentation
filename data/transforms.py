@@ -13,10 +13,7 @@ class CropAroundMaskd2dResize(MapTransform):
 
     def __call__(self, data):
         seg = data[self.keys[1]]
-        # print("here?")
-        # print(seg.shape)
-        # Get bounding box from the segmentation mask
-        # 
+  
         x_dim_size = seg.shape[1] # left right of the image
         y_dim_size = seg.shape[2] # front back of the image
     
@@ -56,30 +53,20 @@ class CropAroundMaskd2dResize(MapTransform):
         else:
             padding = True
 
-        # print("before cropping", data["image"].shape)
         size = (round(diff_x), round(diff_y)) # minimal difference such that the whole segmentation is obtained
-        # print("size", size)
-        # print("center", center)
-        # Create spatial crop transform
+   
         cropper = SpatialCropd(keys = self.keys, roi_center = center, roi_size = size)
-        # print("SIZE: ", size)
-        # print(data[self.keys[0]]["metadata"]["pixdim"])
-        # print(data[self.keys[0]].meta["pixdim"])
-        
-
+      
         # Apply the crop to the image and segmentation mask
         cropped_data = cropper(data)
-        # print("after cropping?", cropped_data["image"].shape)
-        #print(cropped_data)
-
+     
         if padding:
             # Pad the ima÷ge and segmentation mask to make it square
-            # print("WE PAD?????")
             max_dim = round(max([diff_x, diff_y]))
             padder = SpatialPadd(keys = self.keys, spatial_size = max_dim)
             cropped_data = padder(cropped_data) 
             size = (max_dim, max_dim)
-            # print("padding")
+          
 
         resizer = Resized(keys=["image", "label"], spatial_size=[256, 256], mode=["bilinear", "nearest"])
         res_cropped_data = resizer(cropped_data)
@@ -89,8 +76,6 @@ class CropAroundMaskd2dResize(MapTransform):
         new_pix_dim = (size[0] / 256) * 1.0
         data[self.keys[0]].meta["pixdim"][2] = new_pix_dim
         data[self.keys[0]].meta["pixdim"][3] = new_pix_dim
-        # print(data[self.keys[0]].meta["pixdim"])
-        # data["metadata"]["pixdim"] = new_pixel_dimensions
 
 
         return data

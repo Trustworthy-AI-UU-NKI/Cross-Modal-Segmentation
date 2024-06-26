@@ -9,10 +9,9 @@ Below, you can see some examples results.
 
 # Code structure
 - The `data` folder contains the code for preprocessing the data, visualization and the actual preprocessed data.
-- The `baselines` folder contains the code for the baselines; No Adaptation UNet, Full Supervision UNet, vMFnet, DRIT++ with UNet and with resUNet and DDFSeg. 
+- The `baselines` folder contains the code for the baselines; No Adaptation UNet, Full Supervision UNet, vMFnet, DRIT++ with UNet and with ResUNet and DDFSeg. 
 - The `src` folder contains the code for our proposed method.
 - The `data` folder contains the links to out preprocessed data, some notebooks to explore the data and our preprocessing steps.
-
 
 
 # System Requirements
@@ -23,6 +22,9 @@ conda env create -f environment.yml
 conda activate gpu_env
 ```
 
+# Visualization
+
+`visualize_comp.py` and `visualize.py` contains code to make the figures like the examples in the `results` folder. Please change the file and data paths in the code accordingly to make your own figures. 
 
 # Acknowledgements
 
