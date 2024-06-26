@@ -13,18 +13,18 @@ To train and test this baseline for $MRI \rightarrow CT$, run the code below. Fo
 
 ```
 source activate gpu_env
-python run_unet.py -- --pred MYO --name UNet_trained_on_MRI --epochs 200 --bs 4 --lr 0.0001 --data_dir ../data/MMWHS/MR_withGT_proc/ --data_dir_test ../data/MMWHS/CT_withGT_proc/ --k_folds 5 --data_type MMWHS
+python run_unet.py -- --pred MYO --name trained_on_MRI --epochs 200 --bs 4 --lr 0.0001 --data_dir ../data/MMWHS/MR_withGT_proc/ --data_dir_test ../data/MMWHS/CT_withGT_proc/ --k_folds 5 --data_type MMWHS
 
-python evaluate_unet.py -- --pred MYO --name UNet_trained_on_MRI --bs 1 --data_dir_test ../data/MMWHS/CT_withGT_proc/ --k_folds 5 --data_type MMWHS
+python evaluate_unet.py -- --pred MYO --name trained_on_MRI --bs 1 --data_dir_test ../data/MMWHS/CT_withGT_proc/ --k_folds 5 --data_type MMWHS
 ```
 
 If you want to run this baseline on the CHAOS dataset with $T1 \rightarrow T2$ for cross-modal liver segmentation,  run the code below. For the other direction, please change the arguments `--data_dir`, `--data_dir_test`, and `--name` accordingly.
 
 ```
 source activate gpu_env
-python run_unet.py -- --pred Liver --name UNet_trained_on_T1 --epochs 200 --bs 4 --lr 0.0001 --data_dir ../data/CHAOS/T1/ --data_dir_test ../data/CHAOS/T2/ --k_folds 5 --data_type CHAOS
+python run_unet.py -- --pred Liver --name trained_on_T1 --epochs 200 --bs 4 --lr 0.0001 --data_dir ../data/CHAOS/T1/ --data_dir_test ../data/CHAOS/T2/ --k_folds 5 --data_type CHAOS
 
-python evaluate_unet.py -- --pred Liver --name UNet_trained_on_T1 --bs 1 --data_dir_test ../data/CHAOS/T2/ --k_folds 5 --data_type CHAOS
+python evaluate_unet.py -- --pred Liver --name trained_on_T1 --bs 1 --data_dir_test ../data/CHAOS/T2/ --k_folds 5 --data_type CHAOS
 ```
 
 ## UNet-FS
@@ -32,18 +32,18 @@ To train and test this baseline for $MRI \rightarrow CT$, run the code below. Fo
 
 ```
 source activate gpu_env
-python run_unet.py -- --pred MYO --name UNet_trained_on_CT --epochs 200 --bs 4 --lr 0.0001 --data_dir ../data/MMWHS/CT_withGT_proc/ --data_dir_test ../data/MMWHS/CT_withGT_proc/ --k_folds 5 --data_type MMWHS
+python run_unet.py -- --pred MYO --name trained_on_CT --epochs 200 --bs 4 --lr 0.0001 --data_dir ../data/MMWHS/CT_withGT_proc/ --data_dir_test ../data/MMWHS/CT_withGT_proc/ --k_folds 5 --data_type MMWHS
 
-python evaluate_unet.py -- --pred MYO --name UNet_trained_on_CT --bs 1 --data_dir_test ../data/MMWHS/CT_withGT_proc/ --k_folds 5 --data_type MMWHS
+python evaluate_unet.py -- --pred MYO --name trained_on_CT --bs 1 --data_dir_test ../data/MMWHS/CT_withGT_proc/ --k_folds 5 --data_type MMWHS
 ```
 
 If you want to run this baseline on the CHAOS dataset with $T1 \rightarrow T2$ for cross-modal liver segmentation,  run the code below. For the other direction, please change the arguments `--data_dir`, `--data_dir_test`, and `--name` accordingly.
 
 ```
 source activate gpu_env
-python run_unet.py -- --pred Liver --name UNet_trained_on_T2 --epochs 200 --bs 4 --lr 0.0001 --data_dir ../data/CHAOS/T2/ --data_dir_test ../data/CHAOS/T2/ --k_folds 5 --data_type CHAOS
+python run_unet.py -- --pred Liver --name trained_on_T2 --epochs 200 --bs 4 --lr 0.0001 --data_dir ../data/CHAOS/T2/ --data_dir_test ../data/CHAOS/T2/ --k_folds 5 --data_type CHAOS
 
-python evaluate_unet.py -- --pred Liver --name UNet_trained_on_T2 --bs 1 --data_dir_test ../data/CHAOS/T2/ --k_folds 5 --data_type CHAOS
+python evaluate_unet.py -- --pred Liver --name trained_on_T2 --bs 1 --data_dir_test ../data/CHAOS/T2/ --k_folds 5 --data_type CHAOS
 ```
 
 
@@ -54,8 +54,8 @@ To train and test this baseline for $MRI \rightarrow CT$, run the code below. Fo
 ```
 source activate gpu_env
 cd vMFNet
-python train.py --name single_MRI_MYO --data_dir ../dta/MMWHS/MR_withGT_proc/ --pred MYO --data_type MMWHS
-python test.py --name single_MRI_MYO --data_dir ../data/MMWHS/CT_withGT_proc/ --pred MYO --data_type MMWHS
+python train.py --name single_MRI_MYO --data_dir ../../data/MMWHS/MR_withGT_proc/ --pred MYO --data_type MMWHS
+python test.py --name single_MRI_MYO --data_dir ../../data/MMWHS/CT_withGT_proc/ --pred MYO --data_type MMWHS
 ```
 
 To train and test this baseline for $T1 \rightarrow T2$, run the code below. For the other direction, please change the arguments `--data_dir` and `--name` accordingly.
@@ -63,8 +63,8 @@ To train and test this baseline for $T1 \rightarrow T2$, run the code below. For
 ```
 source activate gpu_env
 cd vMFNet
-python train.py --name single_T1_Liver --data_dir ../data/CHAOS/T1/ --pred Liver --data_type CHAOS
-python test.py --name single_T1_Liver --data_dir ../data/CHAOS/T2/ --pred Liver --data_type CHAOS
+python train.py --name single_T1_Liver --data_dir ../../data/CHAOS/T1/ --pred Liver --data_type CHAOS
+python test.py --name single_T1_Liver --data_dir ../../data/CHAOS/T2/ --pred Liver --data_type CHAOS
 ```
 
 
@@ -121,11 +121,13 @@ python create_fake_img.py --resume ../results/run_fold_3/00499.pth --name run_fo
 python create_fake_img.py --resume ../results/run_fold_4/00549.pth --name run_fold_4 --a2b 1 --data_dir1 ../../../data/MMWHS/CT_withGT_proc/ --cases_folds 4 --result_dir ../../../data/other/fake_MR/ --data_type MMWHS
 ```
 
-Then with those synthetic target data, we have two second stage segmentation models, UNet and ResUNet. The following code is an example of how to train and test a UNEt for the task $MRI \rightarrow CT$ for MYO segmentation.
+Then with those synthetic target data, we have two second stage segmentation models, UNet and ResUNet. The following code is an example of how to train and test a UNEt for the task $MRI \rightarrow CT$ for MYO segmentation. NB: we first go back to the `baselines` directory.
 
 ```
-python run_unet.py -- --pred MYO --name UNet_trained_on_fake_MRI --epochs 200 --bs 4 --lr 0.0001 --data_dir ../data/MMWHS/fake_MR/  --k_folds 5 --drit --data_dir_test ../data/MMWHS/MR_withGT_proc/ --model unet --data_type MMWHS
-python evaluate_unet.py -- --pred MYO --name UNet_trained_on_fake_MRI --bs 1 --data_dir_test ../data/MMWHS/MR_withGT_proc/ --k_folds 5 --model unet --data_type MMWHS
+cd ..
+cd ..
+python run_unet.py -- --pred MYO --name trained_on_fake_MRI --epochs 200 --bs 4 --lr 0.0001 --data_dir ../data/MMWHS/fake_MR/  --k_folds 5 --drit --data_dir_test ../data/MMWHS/MR_withGT_proc/ --model UNet --data_type MMWHS
+python evaluate_unet.py -- --pred MYO --name trained_on_fake_MRI --bs 1 --data_dir_test ../data/MMWHS/MR_withGT_proc/ --k_folds 5 --model UNet --data_type MMWHS
 ```
 - If you want to run the ResUNet, change `--model` to `ResUNet`.
 - For the other segmentation tasks (i.e. other direction, structure or dataset) change the following arguments accordingly: `--pred`, `--name`, `--data_dir`, `--data_dir_test`, and `--data_type` (similar as with the UNet-NA and UNet-FS baselines).

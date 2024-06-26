@@ -6,7 +6,7 @@ import glob
 import pytorch_lightning as pl
 
 from torch.utils.data import DataLoader
-from data import MMWHS, CHAOS
+from dataloaders import MMWHS, CHAOS
 
 import numpy as np
 
@@ -83,7 +83,7 @@ def main(args):
     pl.seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    filename = f'{args.name}_{args.pred}'    
+    filename = f'{args.model}_{args.name}_{args.pred}'  
     dir_checkpoint = os.path.join('checkpoints/', filename)
     os.makedirs(dir_checkpoint, exist_ok=True)
 
@@ -166,7 +166,7 @@ if __name__ == '__main__':
     
     parser.add_argument('--pred', default='MYO', type=str, help='Prediction of which label') # MYO, LV, RV, MYO_RV, MYO_LV_RV, Liver    
 
-    parser.add_argument('--model', default='ResUNet', type=str, help='ResUNet or UNet')
+    parser.add_argument('--model', default='UNet', type=str, help='ResUNet or UNet')
     
      # Add k-folds argument
     parser.add_argument('--k_folds', default=5, type=int, help='Number of folds for K-Fold Cross-Validation')

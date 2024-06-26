@@ -94,8 +94,8 @@ def test_k_folds(args, labels, num_classes, device, dataset_type):
         assd, dsc_0, dsc_1 = test_net(save_dir, test_loader, writer, device, num_classes, fold)
         fold += 1
 
-        dsc_scores.append(dsc_1)
-        dsc_scores_BG.append(dsc_0)
+        dsc_scores.append(dsc_1.cpu())
+        dsc_scores_BG.append(dsc_0.cpu())
         assd_scores.append(assd)
 
     # Print all test metrics 

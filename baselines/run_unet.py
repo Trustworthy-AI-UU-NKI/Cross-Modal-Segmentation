@@ -140,6 +140,7 @@ def k_fold(args, dir_checkpoint, dataset_type, labels, device, n_classes):
 
         # Train this fold
         train(args, dir_checkpoint_fold, device, n_classes, train_loader, val_loader)
+        fold += 1
 
 
 def main(args):

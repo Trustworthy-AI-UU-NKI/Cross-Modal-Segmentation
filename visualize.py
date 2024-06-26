@@ -85,7 +85,7 @@ def get_output_pr(image, model_name, device):
     com_features_t, compact_pred_t, pre_seg_t = model.test(image)
 
     compact_pred_t = compact_pred_t[0, 0, :, :].detach().cpu()
-    masked_output = np.ma.masked_where(compact_pred_t[0, 0, :, :] == 0, compact_pred_t[0, 0, :, :])
+    masked_output = np.ma.masked_where(compact_pred_t == 0, compact_pred_t)
     return masked_output
 
 # Get output vMFNet
@@ -234,12 +234,12 @@ def main():
     # Change data_dir to the path of the data and stored models accordingly
     data_dir = "data/CHAOS/T1"
     paths_liver_T1 = {
-        "name_NA": "baselines/checkpoints/UNet_trained_on_T2_Liver/fold_2/",
-        "name_FS": "baselines/checkpoints/UNet_trained_on_T1_Liver/fold_2/",
-        "name_DU": "baselines/checkpoints/UNet_trained_on_fake_T1_Liver/fold_2/",
-        "name_DR": "baselines/checkpoints/ResUNet_trained_on_fake_T1_Liver/fold_2/",
+        "name_NA": "baselines/checkpoints_models/UNet_trained_on_T2_Liver/fold_2/",
+        "name_FS": "baselines/checkpoints_models/UNet_trained_on_T1_Liver/fold_2/",
+        "name_DU": "baselines/checkpoints_models/UNet_trained_on_fake_T1_Liver/fold_2/",
+        "name_DR": "baselines/checkpoints_models/ResUNet_trained_on_fake_T1_Liver/fold_2/",
         "name_VMFNET": "baselines/vMFNet/checkpoints/single_T2_liver/fold_2/",
-        "name_PR": "src/checkpoints/proposed_liver/TargetT1/xavier_init_true_opt_10_newmetric/fold_2/",
+        "name_PR": "src/checkpoints_true/proposed_liver/TargetT1/xavier_init_true_opt_10_newmetric/fold_2/",
         "name_DDF": "baselines/DDFSeg/results/Liver_CHAOS_T1/fold_2/"
     }
     
