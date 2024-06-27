@@ -18,7 +18,7 @@ python preproc_mmwhs.py
 
 
 ## CHAOS
-To preprocess the MMWHS data, first download the CHAOS data from [here](https://github.com/FupingWu90/CT_MR_2D_Dataset_DA), into the main directory (i.e., `CrossModal-DRL`).
+To preprocess the CHAOS data, first download the CHAOS data from [here](https://chaos.grand-challenge.org), into the main directory (i.e., `CrossModal-DRL`).
 Then run the following code from this directory (i.e. `data/`)
 
 ```
