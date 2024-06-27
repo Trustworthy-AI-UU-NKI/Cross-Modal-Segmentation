@@ -76,21 +76,21 @@ To obtain the source code for the DRIT model, please clone [this repository](htt
 ```
 source activate gpu_env
 cd DRIT/src
-python train.py --name chaos_run_fold_0 --batch_size 2 --data_dir1 ../../../data/CHAOS/T1/ --data_dir2 ../../../data/CHAOS/T2/ --cases_folds 0 --data_type CHAOS
-python train.py --name chaos_run_fold_1 --batch_size 2 --data_dir1 ../../../data/CHAOS/T1/ --data_dir2 ../../../data/CHAOS/T2/ --cases_folds 1 --data_type CHAOS 
-python train.py --name chaos_run_fold_2 --batch_size 2 --data_dir1 ../../../data/CHAOS/T1/ --data_dir2 ../../../data/CHAOS/T2/ --cases_folds 2 --data_type CHAOS
-python train.py --name chaos_run_fold_3 --batch_size 2 --data_dir1 ../../../data/CHAOS/T1/ --data_dir2 ../../../data/CHAOS/T2/ --cases_folds 3 --data_type CHAOS
-python train.py --name chaos_run_fold_4 --batch_size 2 --data_dir1 ../../../data/CHAOS/T1/ --data_dir2 ../../../data/CHAOS/T2/ --cases_folds 4 --data_type CHAOS 
-```
-
-```
-source activate gpu_env
-cd DRIT/src
 python train.py --name mmwhs_run_fold_0 --batch_size 2 --data_dir1 ../../../data/MMWHS/CT_withGT_proc/ --data_dir2 ../../../data/MMWHS/MR_withGT_proc/ --cases_folds 0 --data_type MMWHS
 python train.py --name mmwhs_run_fold_1 --batch_size 2 --data_dir1 ../../../data/MMWHS/CT_withGT_proc/ --data_dir2 ../../../data/MMWHS/MR_withGT_proc/ --cases_folds 1 --data_type MMWHS 
 python train.py --name mmwhs_run_fold_2 --batch_size 2 --data_dir1 ../../../data/MMWHS/CT_withGT_proc/ --data_dir2 ../../../data/MMWHS/MR_withGT_proc/ --cases_folds 2 --data_type MMWHS
 python train.py --name mmwhs_run_fold_3 --batch_size 2 --data_dir1 ../../../data/MMWHS/CT_withGT_proc/ --data_dir2 ../../../data/MMWHS/MR_withGT_proc/ --cases_folds 3 --data_type MMWHS
 python train.py --name mmwhs_run_fold_4 --batch_size 2 --data_dir1 ../../../data/MMWHS/CT_withGT_proc/ --data_dir2 ../../../data/MMWHS/MR_withGT_proc/ --cases_folds 4 --data_type MMWHS 
+```
+
+```
+source activate gpu_env
+cd DRIT/src
+python train.py --name chaos_run_fold_0 --batch_size 2 --data_dir1 ../../../data/CHAOS/T1/ --data_dir2 ../../../data/CHAOS/T2/ --cases_folds 0 --data_type CHAOS
+python train.py --name chaos_run_fold_1 --batch_size 2 --data_dir1 ../../../data/CHAOS/T1/ --data_dir2 ../../../data/CHAOS/T2/ --cases_folds 1 --data_type CHAOS 
+python train.py --name chaos_run_fold_2 --batch_size 2 --data_dir1 ../../../data/CHAOS/T1/ --data_dir2 ../../../data/CHAOS/T2/ --cases_folds 2 --data_type CHAOS
+python train.py --name chaos_run_fold_3 --batch_size 2 --data_dir1 ../../../data/CHAOS/T1/ --data_dir2 ../../../data/CHAOS/T2/ --cases_folds 3 --data_type CHAOS
+python train.py --name chaos_run_fold_4 --batch_size 2 --data_dir1 ../../../data/CHAOS/T1/ --data_dir2 ../../../data/CHAOS/T2/ --cases_folds 4 --data_type CHAOS 
 ```
 
 Then, we evaluated the model using the LPIPS metric, by running the following code for the MMWHS or CHAOS datasets, respectively.

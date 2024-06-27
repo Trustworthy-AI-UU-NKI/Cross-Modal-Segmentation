@@ -123,7 +123,7 @@ def k_fold(args, dir_checkpoint, dataset_type, labels, device, n_classes):
 
         # Data directories for DRIT are a bit different, as for each fold we have a seperate dataset from drit
         if args.drit:
-            data_dir = os.path.join(args.data_dir, f"{args.data_type}_run_fold_{fold}")
+            data_dir = os.path.join(args.data_dir, f"run_fold_{fold}")
         else:
             data_dir = args.data_dir
 
