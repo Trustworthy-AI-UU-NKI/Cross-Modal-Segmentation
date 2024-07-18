@@ -1,7 +1,6 @@
 # Enhancing Cross-Modal Medical Image Segmentation through Compositionality and Disentanglement
 
 This repository contains the implementation of our proposed method, where we introduced compositionality into a cross-modal segmentation framework to enhance performance and interpretability, while reducing computational costs. 
-A shorter version of this thesis is under review at the Deep Generative Models workshop @ MICCAI 2024. If accepted, we will make this repository public and upload all the models' checkpoints to Huggingface. 
 Below, you can see some examples results of our method with the interpretable compositional representations.
 
 ![results](../results/comp_MRI->CT_MYO_LV_RV.png)
@@ -10,7 +9,7 @@ Below, you can see some examples results of our method with the interpretable co
 - The `composition` folder contains all the code for the compositional layer.
 - The `models` folder contains the code for our proposed model (`crosscompcsd.py`) and all its sub-modules. 
 - The `data` folder contains the code for the data loaders of the CHAOS and MMWHS datasets.
-- The `checkpoints` folder contains the checkpoints of the trained models.
+- The `checkpoints` folder contains the checkpoints of the trained models. To load the checkpoints in this folder, please load them from [Huggingface]().
 - The `logs` folder contains the Tensorboard results of the different experiments.
 
 # Training
