@@ -271,4 +271,3 @@ dependencies:
     - widgetsnbextension==4.0.9
     - wrapt==1.14.1
     - yarl==1.9.2
-prefix: /home/aeijpe/.conda/envs/gpu_env
