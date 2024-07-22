@@ -9,7 +9,7 @@ Below, you can see some examples results of our method with the interpretable co
 - The `composition` folder contains all the code for the compositional layer.
 - The `models` folder contains the code for our proposed model (`crosscompcsd.py`) and all its sub-modules. 
 - The `data` folder contains the code for the data loaders of the CHAOS and MMWHS datasets.
-- The `checkpoints` folder contains the checkpoints of the trained models. To load the checkpoints in this folder, please load them from [Huggingface](https://huggingface.co/trustworthy-ai).
+- The `checkpoints` folder contains the checkpoints of the trained models. To load the checkpoints in this folder, please load them from [Huggingface](https://huggingface.co/trustworthy-ai/Cross-Modal-Segmentation).
 - The `logs` folder contains the Tensorboard results of the different experiments.
 
 # Training
