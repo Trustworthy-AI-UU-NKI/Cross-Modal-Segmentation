@@ -9,5 +9,5 @@ Please refer to the README in the baselines folder to see how you can run this b
 
 ## Code structure
 
-- In `results`, all checkpoints to the DDFSeg model for the different folds are stored. To load the checkpoints in this folder, please load them from [Huggingface]().
+- In `results`, all checkpoints to the DDFSeg model for the different folds are stored. To load the checkpoints in this folder, please load them from [Huggingface](https://huggingface.co/trustworthy-ai).
 - `src` contains the source code for the DDFSeg model.
