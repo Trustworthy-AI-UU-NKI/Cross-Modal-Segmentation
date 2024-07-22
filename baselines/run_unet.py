@@ -186,7 +186,7 @@ if __name__ == '__main__':
     parser.add_argument('--pred', default='MYO', type=str,
                         help='Prediction of which label') # MYO, LV, RV, MYO_RV, MYO_LV_RV, Liver
     
-    parser.add_argument('--model', default='UNet', type=str,help='ResUNet or UNet')
+    parser.add_argument('--model', default='ResUNet', type=str,help='ResUNet or UNet')
     
     parser.add_argument('--drit', action='store_true')
     
