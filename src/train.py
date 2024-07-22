@@ -154,7 +154,7 @@ def main(args):
     # Get Dataset
     if args.data_type == "MMWHS":
         dataset_type = MMWHS
-    elif args.data_type == "chaos":
+    elif args.data_type == "CHAOS":
         dataset_type = CHAOS
     else:
         raise ValueError(f"Data type {args.data_type} not supported")
