@@ -3,7 +3,7 @@
 This folder contains the implementation for all the baselines; No Adaptation UNet, Full Supervision UNet, vMFnet, DRIT++ with UNet and with ResUNet and DDFSeg. Below, we explain how to run all baselines. 
 
 ## Code structure
-- The `checkpoints` folder contains all checkpoints from the UNet-NA, UNet-FS and the second stage (after DRIT) UNet and ResUNet models. To load the checkpoints in this folder, please load them from [Huggingface](https://huggingface.co/trustworthy-ai).
+- The `checkpoints` folder contains all checkpoints from the UNet-NA, UNet-FS and the second stage (after DRIT) UNet and ResUNet models. To load the checkpoints in this folder, please load them from [Huggingface](https://huggingface.co/trustworthy-ai/Cross-Modal-Segmentation).
 - The `DDFSeg` folder contains all source code for the DDFSeg network. 
 - The `DRIT` folder contains all source code for the DRIT model.
 - The `vMFNet` folder contains all source code for the vMFNet network.
