@@ -1,10 +1,12 @@
-# Enhancing Cross-Modal Medical Image Segmentation through Compositionality and Disentanglement
+# Enhancing Cross-Modal Medical Image Segmentation through Compositionality
 
-This repository contains the implementation of several disentangled representation learning models for cross-modal medical image segmentation.
-In particular, it contains the implementation of our proposed method, where we introduced compositionality into a cross-modal segmentation framework to enhance performance and interpretability, while reducing computational costs. 
+This repository contains the implementation of our paper "Enhancing Cross-Modal Medical Image Segmentation through Compositionality", accepted at Deep Generative Models workshop @ MICCAI 2024 (DGM4MICCAI). For our submitted manuscript with added funding acknowledgements and authors' names and affiliations, but without post submission improvements or corrections, please click [here](https://arxiv.org/abs/2408.11733). The final version is not published yet. 
+
+Our proposed network is an end-to-end cross-modal segmentation framework that enforces compositionality on the learned representations using learnable von Mises-Fisher kernels. These kernels facilitate content-style disentanglement in the learned representations, resulting in compositional content representations that are inherently interpretable and effectively disentangle different anatomical structures. 
 Below, you can see some examples results.
 
 ![results](results/vis_MRI->CT_MYO_LV_RV.png)
+![comp](results/comp_MRI->CT_MYO_LV_RV.png)
 
 Contact: Aniek Eijpe (a.eijpe@uu.nl)
 
@@ -31,7 +33,7 @@ conda activate gpu_env
 Please cite our paper if you find the code useful for your research.
 
 ```
-Add citation
+Final version not published yet
 ```
 
 # Acknowledgements
